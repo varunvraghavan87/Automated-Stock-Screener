@@ -16,16 +16,3 @@ export function createSupabaseBrowserClient(): SupabaseClient | null {
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }
 
-/**
- * Creates a Supabase browser client, throwing if env vars are missing.
- * Use this in auth pages where Supabase MUST be configured.
- */
-export function requireSupabaseBrowserClient(): SupabaseClient {
-  const client = createSupabaseBrowserClient();
-  if (!client) {
-    throw new Error(
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    );
-  }
-  return client;
-}
