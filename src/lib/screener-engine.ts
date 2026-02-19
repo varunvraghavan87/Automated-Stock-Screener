@@ -15,7 +15,6 @@ export function phase1Filter(
   stock: StockData,
   config: ScreenerConfig = DEFAULT_SCREENER_CONFIG
 ): boolean {
-  if (stock.marketCap < config.minMarketCap) return false;
   if (stock.avgDailyTurnover < config.minAvgDailyTurnover) return false;
   return true;
 }

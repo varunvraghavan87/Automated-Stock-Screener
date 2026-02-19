@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { MOCK_STOCKS } from "@/lib/mock-data";
 import { runScreener } from "@/lib/screener-engine";
 import { KiteAPI } from "@/lib/kite-api";
-import { LiveDataService, NIFTY_200_TOP_SYMBOLS } from "@/lib/live-data-service";
+import { LiveDataService, NIFTY_500_SYMBOLS } from "@/lib/live-data-service";
 import { getSession } from "@/lib/kite-session";
 import {
   type ScreenerConfig,
   DEFAULT_SCREENER_CONFIG,
 } from "@/lib/types";
 
-// Extend serverless function timeout for live data fetching
-export const maxDuration = 60;
+// Extend serverless function timeout for live data fetching (500 stocks)
+// Vercel Pro: up to 300s. Hobby: up to 60s.
+export const maxDuration = 300;
 
 export async function GET() {
   // Check if there's an active Kite session
@@ -25,7 +26,7 @@ export async function GET() {
         accessToken: session.accessToken,
       });
       const liveService = new LiveDataService(kite);
-      stocks = await liveService.fetchAndComputeIndicators(NIFTY_200_TOP_SYMBOLS);
+      stocks = await liveService.fetchAndComputeIndicators(NIFTY_500_SYMBOLS);
       mode = "live";
     } catch (error) {
       console.error("Kite API failed, falling back to demo:", error);
@@ -46,25 +47,7 @@ export async function GET() {
       phase4Volume: results.filter((r) => r.phase4VolumePass).length,
       phase5Volatility: results.filter((r) => r.phase5VolatilityPass).length,
     },
-    results: results.map((r) => ({
-      symbol: r.stock.symbol,
-      name: r.stock.name,
-      sector: r.stock.sector,
-      lastPrice: r.stock.lastPrice,
-      changePercent: r.stock.changePercent,
-      signal: r.signal,
-      overallScore: r.overallScore,
-      phase1Pass: r.phase1Pass,
-      phase2Pass: r.phase2Pass,
-      phase3Pass: r.phase3Pass,
-      phase4VolumePass: r.phase4VolumePass,
-      phase5VolatilityPass: r.phase5VolatilityPass,
-      entry: r.phase6.entryPrice,
-      stopLoss: r.phase6.stopLoss,
-      target: r.phase6.target,
-      riskReward: r.phase6.riskRewardRatio,
-      rationale: r.rationale,
-    })),
+    results,
   });
 }
 
@@ -75,7 +58,7 @@ export async function POST(request: Request) {
     ...body.config,
   };
 
-  const symbols = body.symbols || NIFTY_200_TOP_SYMBOLS;
+  const symbols = body.symbols || NIFTY_500_SYMBOLS;
 
   let stocks = MOCK_STOCKS;
   let mode = "demo";
@@ -125,34 +108,6 @@ export async function POST(request: Request) {
       phase4Volume: results.filter((r) => r.phase4VolumePass).length,
       phase5Volatility: results.filter((r) => r.phase5VolatilityPass).length,
     },
-    results: results.map((r) => ({
-      symbol: r.stock.symbol,
-      name: r.stock.name,
-      sector: r.stock.sector,
-      lastPrice: r.stock.lastPrice,
-      changePercent: r.stock.changePercent,
-      signal: r.signal,
-      overallScore: r.overallScore,
-      phase1Pass: r.phase1Pass,
-      phase2Pass: r.phase2Pass,
-      phase3Pass: r.phase3Pass,
-      phase4VolumePass: r.phase4VolumePass,
-      phase5VolatilityPass: r.phase5VolatilityPass,
-      entry: r.phase6.entryPrice,
-      stopLoss: r.phase6.stopLoss,
-      target: r.phase6.target,
-      riskReward: r.phase6.riskRewardRatio,
-      indicators: {
-        rsi14: r.indicators.rsi14,
-        adx14: r.indicators.adx14,
-        macdHistogram: r.indicators.macdHistogram,
-        stochasticK: r.indicators.stochasticK,
-        bollingerPercentB: r.indicators.bollingerPercentB,
-        superTrendDirection: r.indicators.superTrendDirection,
-        obvTrend: r.indicators.obvTrend,
-        mfi14: r.indicators.mfi14,
-      },
-      rationale: r.rationale,
-    })),
+    results,
   });
 }

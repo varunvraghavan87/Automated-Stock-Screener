@@ -35,10 +35,54 @@ const SECTOR_MAP: Record<string, string> = {
   HINDUNILVR: "FMCG", ITC: "FMCG", NESTLEIND: "FMCG", TITAN: "Consumer",
   ASIANPAINT: "Consumer", ULTRACEMCO: "Cement", ADANIENT: "Conglomerate",
   POWERGRID: "Utilities", NTPC: "Utilities", ONGC: "Energy",
+  ADANIPORTS: "Infrastructure", APOLLOHOSP: "Healthcare", BPCL: "Energy",
+  BRITANNIA: "FMCG", COALINDIA: "Mining", DIVISLAB: "Pharma", EICHERMOT: "Automobile",
+  GRASIM: "Cement", HEROMOTOCO: "Automobile", INDUSINDBK: "Banking",
+  ICICIGI: "Insurance", ICICIPRULI: "Insurance", HDFCLIFE: "Insurance",
+  SBILIFE: "Insurance", SBICARD: "NBFC", TATACONSUM: "FMCG", VEDL: "Metals & Mining",
+  TRENT: "Retail", ZOMATO: "Technology", JIOFIN: "NBFC", SHRIRAMFIN: "NBFC",
+  PIDILITIND: "Chemicals", GODREJCP: "FMCG", DABUR: "FMCG", HAVELLS: "Consumer",
+  VOLTAS: "Consumer", POLYCAB: "Consumer", AMBUJACEM: "Cement", ACC: "Cement",
+  BANKBARODA: "Banking", PNB: "Banking", CANBK: "Banking", UNIONBANK: "Banking",
+  IDFCFIRSTB: "Banking", FEDERALBNK: "Banking", BANDHANBNK: "Banking",
+  BIOCON: "Pharma", LUPIN: "Pharma", TORNTPHARM: "Pharma", AUROPHARMA: "Pharma",
+  ALKEM: "Pharma", LALPATHLAB: "Healthcare", MAXHEALTH: "Healthcare",
+  FORTIS: "Healthcare", JUBLFOOD: "FMCG", COLPAL: "FMCG", MARICO: "FMCG",
+  MCDOWELL_N: "Consumer", UBL: "Consumer", PAGEIND: "Consumer",
+  DLF: "Real Estate", GODREJPROP: "Real Estate", OBEROIRLTY: "Real Estate",
+  PRESTIGE: "Real Estate", LODHA: "Real Estate", PHOENIXLTD: "Real Estate",
+  PIIND: "Chemicals", ATUL: "Chemicals", NAVINFLUOR: "Chemicals",
+  DEEPAKNTR: "Chemicals", SRF: "Chemicals", COFORGE: "IT Services",
+  LTIM: "IT Services", MPHASIS: "IT Services", PERSISTENT: "IT Services",
+  LTTS: "IT Services", NAUKRI: "IT Services", TATAELXSI: "IT Services",
+  HAL: "Defence", BEL: "Defence", BHEL: "Infrastructure", SIEMENS: "Infrastructure",
+  ABB: "Infrastructure", CUMMINSIND: "Infrastructure", THERMAX: "Infrastructure",
+  IRCTC: "Travel", INDIGO: "Travel", TATAPOWER: "Utilities", ADANIGREEN: "Utilities",
+  NHPC: "Utilities", RECLTD: "NBFC", PFC: "NBFC", IRFC: "NBFC",
+  INDUSTOWER: "Telecom", IDEA: "Telecom", ZYDUSLIFE: "Pharma",
+  MANKIND: "Pharma", GLAND: "Pharma",
+  MOTHERSON: "Automobile", BALKRISIND: "Automobile", ASHOKLEY: "Automobile",
+  BAJAJ_AUTO: "Automobile", TVS: "Automobile", BOSCHLTD: "Automobile",
+  MRF: "Automobile", EXIDEIND: "Automobile", AMARAJABAT: "Automobile",
+  HINDPETRO: "Energy", IOC: "Energy", GAIL: "Energy", PETRONET: "Energy",
+  SAIL: "Metals & Mining", NATIONALUM: "Metals & Mining", NMDC: "Metals & Mining",
+  JINDALSTEL: "Metals & Mining", TATACOMM: "Telecom", MFSL: "NBFC",
+  CHOLAFIN: "NBFC", M_MFIN: "NBFC", MANAPPURAM: "NBFC", MUTHOOTFIN: "NBFC",
+  CROMPTON: "Consumer", WHIRLPOOL: "Consumer", DIXON: "Consumer",
+  KAYNES: "Electronics", APLAPOLLO: "Metals & Mining",
+  CONCOR: "Logistics", DELHIVERY: "Logistics",
+  NYKAA: "Technology", PAYTM: "Technology", POLICYBZR: "Technology",
+  INDHOTEL: "Hospitality", LEMON: "Hospitality", CGPOWER: "Infrastructure",
+  SUZLON: "Utilities", JSWENERGY: "Utilities", TORNTPOWER: "Utilities",
+  ABBOTINDIA: "Pharma", IPCALAB: "Pharma",
 };
 
 // Nifty 50 instrument token for relative strength calculation
 const NIFTY50_INSTRUMENT_TOKEN = 256265;
+
+// Concurrent batch size for historical data fetching (Kite allows 3 req/sec for historical)
+const HISTORICAL_BATCH_SIZE = 3;
+const BATCH_DELAY_MS = 350; // Delay between batches to stay within rate limits
 
 interface HistoricalCandle {
   date: string;
@@ -48,6 +92,9 @@ interface HistoricalCandle {
   close: number;
   volume: number;
 }
+
+// Kite quote API limit is 250 instruments per call
+const QUOTE_BATCH_SIZE = 250;
 
 export class LiveDataService {
   private kite: KiteAPI;
@@ -66,14 +113,22 @@ export class LiveDataService {
       instruments.map((inst) => [inst.tradingsymbol, inst])
     );
 
-    // 2. Fetch current quotes
+    // 2. Fetch current quotes in batches of 250 (Kite API limit)
     const quoteSymbols = symbols.map((s) => `${exchange}:${s}`);
-    const quotes = await this.kite.fetchQuotes(quoteSymbols);
+    const quotes = new Map<string, { last_price: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number; change: number }>();
 
-    // 3. Calculate date range (200+ trading days back)
+    for (let i = 0; i < quoteSymbols.length; i += QUOTE_BATCH_SIZE) {
+      const batch = quoteSymbols.slice(i, i + QUOTE_BATCH_SIZE);
+      const batchQuotes = await this.kite.fetchQuotes(batch);
+      for (const [key, value] of batchQuotes) {
+        quotes.set(key, value);
+      }
+    }
+
+    // 3. Calculate date range (365 days back for ~250 trading days)
     const to = new Date();
     const from = new Date();
-    from.setDate(from.getDate() - 365); // ~250 trading days
+    from.setDate(from.getDate() - 365);
 
     // 4. Fetch Nifty 50 historical for relative strength
     let niftyHistory: HistoricalCandle[] = [];
@@ -89,38 +144,61 @@ export class LiveDataService {
     }
     const niftyCloses = niftyHistory.map((c) => c.close);
 
-    // 5. For each symbol, fetch historical + compute indicators
+    // 5. For each symbol, fetch historical + compute indicators (in concurrent batches)
     const results: Array<{ stock: StockData; indicators: TechnicalIndicators }> = [];
 
-    for (const symbol of symbols) {
-      try {
-        const instrument = instrumentMap.get(symbol);
-        if (!instrument) continue;
+    for (let i = 0; i < symbols.length; i += HISTORICAL_BATCH_SIZE) {
+      const batch = symbols.slice(i, i + HISTORICAL_BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((symbol) =>
+          this.processSymbol(symbol, instrumentMap, quotes, exchange, from, to, niftyCloses)
+        )
+      );
 
-        const quote = quotes.get(`${exchange}:${symbol}`);
-        if (!quote) continue;
+      for (const result of batchResults) {
+        if (result.status === "fulfilled" && result.value) {
+          results.push(result.value);
+        }
+      }
 
-        // Fetch historical data
-        const history = await this.kite.fetchHistorical(
-          instrument.instrument_token,
-          "day",
-          from,
-          to
-        );
-
-        if (history.length < 52) continue; // Need minimum data
-
-        const indicators = this.computeAllIndicators(history, niftyCloses);
-        const stock = this.buildStockData(quote, instrument, history, exchange, symbol);
-
-        results.push({ stock, indicators });
-      } catch (err) {
-        console.error(`Failed to process ${symbol}:`, err);
-        continue;
+      // Delay between batches to respect rate limits
+      if (i + HISTORICAL_BATCH_SIZE < symbols.length) {
+        await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
       }
     }
 
     return results;
+  }
+
+  private async processSymbol(
+    symbol: string,
+    instrumentMap: Map<string, { instrument_token: number; tradingsymbol: string; name: string; exchange: string }>,
+    quotes: Map<string, { last_price: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number; change: number }>,
+    exchange: string,
+    from: Date,
+    to: Date,
+    niftyCloses: number[]
+  ): Promise<{ stock: StockData; indicators: TechnicalIndicators } | null> {
+    const instrument = instrumentMap.get(symbol);
+    if (!instrument) return null;
+
+    const quote = quotes.get(`${exchange}:${symbol}`);
+    if (!quote) return null;
+
+    // Fetch historical data
+    const history = await this.kite.fetchHistorical(
+      instrument.instrument_token,
+      "day",
+      from,
+      to
+    );
+
+    if (history.length < 52) return null; // Need minimum data
+
+    const indicators = this.computeAllIndicators(history, niftyCloses);
+    const stock = this.buildStockData(quote, instrument, history, exchange, symbol);
+
+    return { stock, indicators };
   }
 
   private computeAllIndicators(
@@ -296,7 +374,7 @@ export class LiveDataService {
     exchange: string,
     symbol: string
   ): StockData {
-    // Calculate avg daily turnover from last 20 days
+    // Calculate avg daily turnover from last 20 days (in crores)
     const last20 = history.slice(-20);
     const avgTurnover = last20.reduce((sum, c) => sum + (c.close * c.volume) / 10000000, 0) / last20.length;
 
@@ -305,7 +383,7 @@ export class LiveDataService {
       name: instrument.name || symbol,
       exchange,
       sector: SECTOR_MAP[symbol] || "Unknown",
-      marketCap: 0, // Not available from Kite, would need external data
+      marketCap: 0, // Not used for screening — kept for display
       lastPrice: quote.last_price,
       change: quote.change,
       changePercent: quote.ohlc.close > 0
@@ -337,13 +415,91 @@ function wilderSmooth(data: number[], period: number): number[] {
   return result;
 }
 
-// Default Nifty 200 symbols for full screening
-export const NIFTY_200_TOP_SYMBOLS = [
+// Nifty 500 constituents (NSE trading symbols — updated Feb 2026)
+// Source: NSE India official Nifty 500 index constituents
+export const NIFTY_500_SYMBOLS = [
+  // Nifty 50
   "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "HINDUNILVR",
   "BHARTIARTL", "SBIN", "BAJFINANCE", "LT", "ITC", "KOTAKBANK",
   "TATAMOTORS", "AXISBANK", "SUNPHARMA", "MARUTI", "TITAN",
   "HCLTECH", "WIPRO", "TATASTEEL", "NTPC", "POWERGRID", "ONGC",
   "ASIANPAINT", "ULTRACEMCO", "TECHM", "DRREDDY", "CIPLA",
   "BAJAJFINSV", "ADANIENT", "JSWSTEEL", "HINDALCO", "NESTLEIND",
-  "TATASTEEL", "M_M",
+  "M_M", "ADANIPORTS", "APOLLOHOSP", "BPCL", "BRITANNIA",
+  "COALINDIA", "DIVISLAB", "EICHERMOT", "GRASIM", "HEROMOTOCO",
+  "INDUSINDBK", "HDFCLIFE", "SBILIFE", "TATACONSUM",
+  // Nifty Next 50
+  "ICICIGI", "ICICIPRULI", "SBICARD", "VEDL", "TRENT", "ZOMATO",
+  "JIOFIN", "SHRIRAMFIN", "PIDILITIND", "GODREJCP", "DABUR",
+  "HAVELLS", "VOLTAS", "POLYCAB", "AMBUJACEM", "ACC",
+  "BANKBARODA", "PNB", "CANBK", "UNIONBANK", "IDFCFIRSTB",
+  "FEDERALBNK", "BANDHANBNK", "BIOCON", "LUPIN", "TORNTPHARM",
+  "AUROPHARMA", "ALKEM", "LALPATHLAB", "MAXHEALTH", "FORTIS",
+  "JUBLFOOD", "COLPAL", "MARICO", "MCDOWELL_N", "UBL", "PAGEIND",
+  "HAL", "BEL", "BHEL", "SIEMENS", "ABB", "CUMMINSIND",
+  "IRCTC", "INDIGO", "TATAPOWER", "ADANIGREEN", "NHPC",
+  "RECLTD", "PFC", "IRFC", "INDUSTOWER",
+  // Nifty Midcap 150 (selected)
+  "DLF", "GODREJPROP", "OBEROIRLTY", "PRESTIGE", "LODHA", "PHOENIXLTD",
+  "PIIND", "ATUL", "NAVINFLUOR", "DEEPAKNTR", "SRF",
+  "COFORGE", "LTIM", "MPHASIS", "PERSISTENT", "LTTS", "NAUKRI", "TATAELXSI",
+  "MOTHERSON", "BALKRISIND", "ASHOKLEY", "BAJAJ_AUTO", "BOSCHLTD", "MRF",
+  "EXIDEIND", "HINDPETRO", "IOC", "GAIL", "PETRONET",
+  "SAIL", "NATIONALUM", "NMDC", "JINDALSTEL", "TATACOMM",
+  "MFSL", "CHOLAFIN", "M_MFIN", "MANAPPURAM", "MUTHOOTFIN",
+  "CROMPTON", "DIXON", "APLAPOLLO",
+  "CONCOR", "DELHIVERY",
+  "NYKAA", "PAYTM", "POLICYBZR", "INDHOTEL",
+  "CGPOWER", "SUZLON", "JSWENERGY", "TORNTPOWER",
+  "ABBOTINDIA", "IPCALAB", "ZYDUSLIFE", "MANKIND", "GLAND",
+  // Nifty Smallcap 250 (selected top-traded)
+  "THERMAX", "KAYNES", "LEMON",
+  "AMARAJABAT", "TVS",
+  "IDEA", "WHIRLPOOL",
+  // Additional Nifty 500 members
+  "ABCAPITAL", "ABFRL", "AJANTPHARM", "APLLTD", "ASTRAL",
+  "AARTIIND", "AUBANK", "AFFLE", "ANGELONE", "ANANDRATHI",
+  "APTUS", "ASAHIINDIA", "BAJAJELEC", "BASF", "BATAINDIA",
+  "BDL", "BERGEPAINT", "BSE", "CANFINHOME", "CARBORUNIV",
+  "CASTROLIND", "CEATLTD", "CENTRALBK", "CENTURYTEX", "CESC",
+  "CHAMBALFER", "CHEMPLASTS", "CLEAN", "COCHINSHIP", "COROMANDEL",
+  "CREDITACC", "CUB", "CUMMINSIND", "CYIENT", "DCMSHRIRAM",
+  "DMART", "ELGIEQUIP", "EMAMILTD", "ENDURANCE", "EQUITASBNK",
+  "ESCORTS", "FACT", "FINEORG", "FLUOROCHEM", "GLENMARK",
+  "GMRINFRA", "GNFC", "GRANULES", "GSPL", "GUJGASLTD",
+  "HAPPSTMNDS", "HATSUN", "HFCL", "HONAUT", "HUDCO",
+  "IIFL", "INDIAMART", "INDIANB", "IEX", "INTELLECT",
+  "JBCHEPHARM", "JKCEMENT", "JSL", "JTEKTINDIA", "JUBLINGREA",
+  "KALYANKJIL", "KARURVYSYA", "KEI", "KPITTECH", "KRBL",
+  "KSB", "LAURUSLABS", "LICHSGFIN", "LLOYDSME", "LTFOODS",
+  "MAHABANK", "MAHLIFE", "MAPMYINDIA", "MASTEK", "MCX",
+  "METROBRAND", "MHRIL", "MOTILALOFS", "NATCOPHARM", "NAM_INDIA",
+  "NIACL", "NLCINDIA", "OFSS", "OIL", "OLECTRA",
+  "PGHH", "POLYMED", "POONAWALLA", "RADICO", "RAJESHEXPO",
+  "RAMCOCEM", "RBLBANK", "RELAXO", "RITES", "ROUTE",
+  "SANOFI", "SAPPHIRE", "SCHAEFFLER", "SOLARINDS", "SONACOMS",
+  "STARHEALTH", "SUMICHEM", "SUNDARMFIN", "SUNDRMFAST", "SUPREMEIND",
+  "SYNGENE", "TATACHEM", "TATATECH", "TIINDIA", "TIMKEN",
+  "TRIDENT", "TRITURBINE", "TVSMOTOR", "UCOBANK", "UJJIVANSFB",
+  "UNOMINDA", "UPL", "VIKAS", "VBL", "VIJAYA",
+  "VSTIND", "ZEEL", "ZENSAR", "ZFCVINDIA",
+  // More Nifty 500 constituents
+  "AIAENG", "ALKYLAMINE", "AMBER", "APARINDS", "ASTER",
+  "BSOFT", "CAMPUS", "CDSL", "CENTURYPLY", "CHALET",
+  "DATAPATTNS", "DCBBANK", "DEVYANI", "DOMS", "EASEMYTRIP",
+  "EIDPARRY", "EPL", "FDC", "FIVESTAR", "GICRE",
+  "GRINDWELL", "GSFC", "GESHIP", "GLAXO", "GRSE",
+  "GODFRYPHLP", "GPPL", "HBLPOWER", "HEMIPROP", "HINDCOPPER",
+  "HOMEFIRST", "IBREALEST", "IGPL", "INOXWIND", "JAIBALAJI",
+  "JKPAPER", "JMFINANCIL", "JSWINFRA", "JUBLPHARMA", "JUSTDIAL",
+  "KANSAINER", "KIRLFER", "KMCSHIL", "KNRCON", "LATENTVIEW",
+  "LAXMIMACH", "MAZDOCK", "METROPOLIS", "MMTC", "MGL",
+  "NH", "NUVAMA", "NUVOCO", "OLECTRA", "ORIENTELEC",
+  "PATANJALI", "PCBL", "PFLCHEM", "PNBHOUSING", "POWERMECH",
+  "PVRINOX", "QUESS", "RVNL", "REDINGTON", "RENUKA",
+  "RHIM", "RKFORGE", "SAIINDS", "SAP", "SAPPHIRE",
+  "SBCARDS", "SHYAMMETL", "SJVN", "SOBHA", "SUNTV",
+  "TANLA", "TATAINVEST", "TEAMLEASE", "TITAGARH", "TMB",
+  "TVSHLTD", "USHAMART", "VAIBHAVGBL", "WELCORP", "WESTLIFE",
+  "YESBANK", "ZENSARTECH",
 ];

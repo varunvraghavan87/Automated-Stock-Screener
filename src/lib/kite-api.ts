@@ -63,9 +63,10 @@ class RateLimiter {
   }
 }
 
-// 3 requests per second for orders, 1 for quotes
-const orderLimiter = new RateLimiter(3, 1000);
+// Rate limiters per Kite Connect docs: quotes 1/sec, historical 3/sec, orders 10/sec
 const quoteLimiter = new RateLimiter(1, 1000);
+const historicalLimiter = new RateLimiter(3, 1000);
+const orderLimiter = new RateLimiter(10, 1000);
 
 export class KiteAPI {
   private config: KiteConfig;
@@ -151,7 +152,7 @@ export class KiteAPI {
     from: Date,
     to: Date
   ): Promise<KiteHistorical[]> {
-    await quoteLimiter.wait();
+    await historicalLimiter.wait();
     const fromStr = from.toISOString().split("T")[0];
     const toStr = to.toISOString().split("T")[0];
 

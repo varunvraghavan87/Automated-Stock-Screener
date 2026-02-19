@@ -143,7 +143,6 @@ export interface PositionSizing {
 
 export interface ScreenerConfig {
   // Phase 1: Liquidity
-  minMarketCap: number; // crores
   minAvgDailyTurnover: number; // crores
   excludeASMGSM: boolean;
   // Phase 2: Trend
@@ -173,7 +172,6 @@ export interface ScreenerConfig {
 }
 
 export const DEFAULT_SCREENER_CONFIG: ScreenerConfig = {
-  minMarketCap: 5000,
   minAvgDailyTurnover: 20,
   excludeASMGSM: true,
   requireEMAAlignment: true,

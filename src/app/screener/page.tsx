@@ -178,20 +178,6 @@ export default function ScreenerPage() {
                     Phase 1: Universe
                   </h4>
                   <div className="space-y-2">
-                    <Label>Min Market Cap (Cr)</Label>
-                    <Input
-                      type="number"
-                      value={config.minMarketCap}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          minMarketCap: Number(e.target.value),
-                        })
-                      }
-                      className="bg-background"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label>Min Avg Turnover (Cr)</Label>
                     <Input
                       type="number"
@@ -610,7 +596,6 @@ function StockRow({
                       title="Universe & Liquidity"
                       passed={result.phase1Pass}
                       details={[
-                        `Market Cap: ${formatCurrency(result.stock.marketCap * 10000000)} (Min: ₹5,000 Cr)`,
                         `Avg Daily Turnover: ₹${result.stock.avgDailyTurnover.toFixed(1)} Cr (Min: ₹20 Cr)`,
                       ]}
                     />

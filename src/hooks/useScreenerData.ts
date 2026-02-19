@@ -71,18 +71,17 @@ export function useScreenerData(): UseScreenerDataReturn {
 
         const data = await response.json();
 
-        // The API returns a simplified format — we need to reconstruct ScreenerResult[]
-        // For now, re-run the screener client-side but update the mode indicator
-        // This is because the API response doesn't contain the full ScreenerResult shape
-        // (it strips out indicators and details for bandwidth)
         setMode(data.mode === "live" ? "live" : "demo");
         setLastRefresh(new Date(data.timestamp));
 
-        // Re-run client-side screener (which always uses MOCK data currently)
-        // In live mode, the API already ran the screener — but we need the full result shape
-        // TODO: When live data is working, store the full results from API
-        const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig);
-        setResults(freshResults);
+        if (data.mode === "live" && data.results?.length > 0) {
+          // Use full ScreenerResult[] from API (screener ran server-side with live Kite data)
+          setResults(data.results as ScreenerResult[]);
+        } else {
+          // Demo mode: run screener client-side with mock data
+          const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig);
+          setResults(freshResults);
+        }
 
         // Also refresh Kite status
         await checkKiteStatus();
