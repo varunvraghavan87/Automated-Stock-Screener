@@ -4,6 +4,7 @@ import { runScreener } from "@/lib/screener-engine";
 import { KiteAPI } from "@/lib/kite-api";
 import { LiveDataService, NIFTY_500_SYMBOLS } from "@/lib/live-data-service";
 import { getSession } from "@/lib/kite-session";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   type ScreenerConfig,
   DEFAULT_SCREENER_CONFIG,
@@ -14,6 +15,15 @@ import {
 export const maxDuration = 300;
 
 export async function GET() {
+  // Verify user authentication
+  const supabase = await createServerSupabaseClient();
+  if (supabase) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   // Check if there's an active Kite session
   const session = await getSession();
   let stocks = MOCK_STOCKS;
@@ -52,6 +62,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Verify user authentication
+  const supabase = await createServerSupabaseClient();
+  if (supabase) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   const body = await request.json();
   const config: ScreenerConfig = {
     ...DEFAULT_SCREENER_CONFIG,
