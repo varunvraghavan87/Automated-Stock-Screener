@@ -1,65 +1,596 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { Navbar } from "@/components/layout/navbar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import {
+  Activity,
+  TrendingUp,
+  Filter,
+  Zap,
+  BarChart3,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  Target,
+  Shield,
+  Volume2,
+  Waves,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+} from "lucide-react";
+import Link from "next/link";
+import { formatCurrency, formatPercent } from "@/lib/utils";
+import { useScreenerData } from "@/hooks/useScreenerData";
+
+export default function DashboardPage() {
+  const { results, mode, loading, lastRefresh, kiteStatus, refresh } =
+    useScreenerData();
+
+  const strongBuys = results.filter((r) => r.signal === "STRONG_BUY");
+  const buys = results.filter((r) => r.signal === "BUY");
+  const watches = results.filter((r) => r.signal === "WATCH");
+  const topPick = results[0];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Momentum Dashboard</h1>
+            <p className="text-muted-foreground">
+              Nifty Velocity Alpha Framework - Automated Momentum Screener
+            </p>
+          </div>
+          <div className="flex items-center gap-3 mt-4 md:mt-0">
+            <Badge
+              variant={mode === "live" ? "success" : "outline"}
+              className="gap-1"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {mode === "live" ? (
+                <Wifi className="w-3 h-3" />
+              ) : (
+                <WifiOff className="w-3 h-3" />
+              )}
+              {mode === "live" ? "LIVE" : "DEMO"}
+            </Badge>
+            <div className="text-sm text-muted-foreground">
+              Last scan:{" "}
+              <span className="font-mono text-foreground">
+                {lastRefresh.toLocaleTimeString("en-IN")}
+              </span>
+            </div>
+            <Button onClick={() => refresh()} disabled={loading}>
+              {loading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </>
+              )}
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card className="bg-card/50 backdrop-blur border-border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 rounded-lg bg-accent/10">
+                  <TrendingUp className="w-4 h-4 text-accent" />
+                </div>
+                <span className="text-sm text-muted-foreground">Strong Buy</span>
+              </div>
+              <div className="text-3xl font-bold text-accent">
+                {strongBuys.length}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur border-border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Zap className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm text-muted-foreground">Buy</span>
+              </div>
+              <div className="text-3xl font-bold text-primary">{buys.length}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur border-border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 rounded-lg bg-[#f59e0b]/10">
+                  <Clock className="w-4 h-4 text-[#f59e0b]" />
+                </div>
+                <span className="text-sm text-muted-foreground">Watch</span>
+              </div>
+              <div className="text-3xl font-bold text-[#f59e0b]">
+                {watches.length}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur border-border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm text-muted-foreground">Scanned</span>
+              </div>
+              <div className="text-3xl font-bold">{results.length}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Top Pick & Pipeline */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          {topPick && (
+            <Card className="md:col-span-2 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">Top Momentum Pick</CardTitle>
+                  <SignalBadge signal={topPick.signal} />
+                </div>
+                <CardDescription>
+                  Highest scoring stock from the current scan
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold">{topPick.stock.symbol}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {topPick.stock.name}
+                    </p>
+                  </div>
+                  <div className="ml-auto text-right">
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(topPick.stock.lastPrice)}
+                    </div>
+                    <div
+                      className={`text-sm font-mono ${
+                        topPick.stock.changePercent >= 0
+                          ? "text-accent"
+                          : "text-destructive"
+                      }`}
+                    >
+                      {formatPercent(topPick.stock.changePercent)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Entry</p>
+                    <p className="font-bold text-primary">
+                      {formatCurrency(topPick.phase6.entryPrice)}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Stop Loss</p>
+                    <p className="font-bold text-destructive">
+                      {formatCurrency(topPick.phase6.stopLoss)}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Target</p>
+                    <p className="font-bold text-accent">
+                      {formatCurrency(topPick.phase6.target)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">
+                      Momentum Score
+                    </span>
+                    <span className="font-mono font-bold">
+                      {topPick.overallScore}/100
+                    </span>
+                  </div>
+                  <Progress value={topPick.overallScore} className="h-2" />
+                </div>
+
+                <p className="text-sm text-muted-foreground">
+                  {topPick.rationale}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Screening Pipeline */}
+          <Card className="bg-card/50 backdrop-blur border-border">
+            <CardHeader>
+              <CardTitle className="text-lg">Screening Pipeline</CardTitle>
+              <CardDescription>6-phase momentum filter status</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <PipelineStep
+                phase={1}
+                title="Universe & Liquidity"
+                passed={results.filter((r) => r.phase1Pass).length}
+                total={results.length}
+                color="#3b82f6"
+              />
+              <PipelineStep
+                phase={2}
+                title="Trend Establishment"
+                passed={results.filter((r) => r.phase2Pass).length}
+                total={results.filter((r) => r.phase1Pass).length}
+                color="#10b981"
+              />
+              <PipelineStep
+                phase={3}
+                title="Momentum Signal"
+                passed={results.filter((r) => r.phase3Pass).length}
+                total={results.filter((r) => r.phase2Pass).length}
+                color="#f59e0b"
+              />
+              <PipelineStep
+                phase={4}
+                title="Volume Confirmation"
+                passed={results.filter((r) => r.phase4VolumePass).length}
+                total={results.filter((r) => r.phase3Pass).length}
+                color="#8b5cf6"
+              />
+              <PipelineStep
+                phase={5}
+                title="Volatility Check"
+                passed={results.filter((r) => r.phase5VolatilityPass).length}
+                total={results.filter((r) => r.phase4VolumePass).length}
+                color="#ec4899"
+              />
+              <PipelineStep
+                phase={6}
+                title="Risk Management"
+                passed={
+                  results.filter(
+                    (r) => r.phase5VolatilityPass && r.phase6.riskRewardRatio >= 2
+                  ).length
+                }
+                total={results.filter((r) => r.phase5VolatilityPass).length}
+                color="#ef4444"
+              />
+
+              <Link href="/screener">
+                <Button variant="outline" className="w-full mt-4">
+                  View Full Results
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Results Table */}
+        <Card className="bg-card/50 backdrop-blur border-border">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Screener Results</CardTitle>
+                <CardDescription>Stocks ranked by momentum score</CardDescription>
+              </div>
+              <Link href="/screener">
+                <Button variant="ghost" size="sm">
+                  View All <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Symbol
+                    </th>
+                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Price
+                    </th>
+                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Change
+                    </th>
+                    <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Signal
+                    </th>
+                    <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Score
+                    </th>
+                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground hidden md:table-cell">
+                      RSI
+                    </th>
+                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground hidden md:table-cell">
+                      ADX
+                    </th>
+                    <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground hidden lg:table-cell">
+                      Phases
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.slice(0, 10).map((result) => (
+                    <tr
+                      key={result.stock.symbol}
+                      className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
+                    >
+                      <td className="py-3 px-2">
+                        <div>
+                          <span className="font-semibold">
+                            {result.stock.symbol}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {result.stock.sector}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-2 font-mono">
+                        {formatCurrency(result.stock.lastPrice)}
+                      </td>
+                      <td className="text-right py-3 px-2">
+                        <span
+                          className={`font-mono text-sm ${
+                            result.stock.changePercent >= 0
+                              ? "text-accent"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {formatPercent(result.stock.changePercent)}
+                        </span>
+                      </td>
+                      <td className="text-center py-3 px-2">
+                        <SignalBadge signal={result.signal} />
+                      </td>
+                      <td className="text-center py-3 px-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16">
+                            <Progress
+                              value={result.overallScore}
+                              className="h-1.5"
+                            />
+                          </div>
+                          <span className="text-xs font-mono">
+                            {result.overallScore}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-2 font-mono text-sm hidden md:table-cell">
+                        {result.indicators.rsi14.toFixed(1)}
+                      </td>
+                      <td className="text-right py-3 px-2 font-mono text-sm hidden md:table-cell">
+                        {result.indicators.adx14.toFixed(1)}
+                      </td>
+                      <td className="text-center py-3 px-2 hidden lg:table-cell">
+                        <div className="flex items-center justify-center gap-1">
+                          <PhaseIndicator passed={result.phase1Pass} />
+                          <PhaseIndicator passed={result.phase2Pass} />
+                          <PhaseIndicator passed={result.phase3Pass} />
+                          <PhaseIndicator passed={result.phase4VolumePass} />
+                          <PhaseIndicator passed={result.phase5VolatilityPass} />
+                          <PhaseIndicator
+                            passed={result.phase6.riskRewardRatio >= 2}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Framework Overview Cards */}
+        <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-4 mt-8">
+          <FrameworkCard
+            icon={Target}
+            phase={1}
+            title="Universe & Liquidity"
+            items={[
+              "Nifty 500 constituents",
+              "Market Cap > ₹5,000 Cr",
+              "Avg Turnover > ₹20 Cr",
+            ]}
+            color="#3b82f6"
+          />
+          <FrameworkCard
+            icon={TrendingUp}
+            phase={2}
+            title="Trend Establishment"
+            items={[
+              "EMA Alignment (20>50>200)",
+              "ADX(14) > 25",
+              "MACD bullish above zero",
+            ]}
+            color="#10b981"
+          />
+          <FrameworkCard
+            icon={Zap}
+            phase={3}
+            title="Momentum Signal"
+            items={[
+              "Pullback to 20/50 EMA",
+              "RSI(14) in 40-75 zone",
+              "ROC positive, +DI > -DI",
+            ]}
+            color="#f59e0b"
+          />
+          <FrameworkCard
+            icon={Volume2}
+            phase={4}
+            title="Volume Confirmation"
+            items={[
+              "OBV trending up",
+              "Volume > 1.2x average",
+              "MFI in 40-80 zone",
+            ]}
+            color="#8b5cf6"
+          />
+          <FrameworkCard
+            icon={Waves}
+            phase={5}
+            title="Volatility Check"
+            items={[
+              "ATR/Close < 5%",
+              "Bollinger expanding",
+              "Price in upper band",
+            ]}
+            color="#ec4899"
+          />
+          <FrameworkCard
+            icon={Shield}
+            phase={6}
+            title="Risk Management"
+            items={[
+              "Stop Loss: 1.5x ATR",
+              "Target: Min 1:2 R:R",
+              "Max 8% capital risk",
+            ]}
+            color="#ef4444"
+          />
         </div>
       </main>
     </div>
+  );
+}
+
+function PipelineStep({
+  phase,
+  title,
+  passed,
+  total,
+  color,
+}: {
+  phase: number;
+  title: string;
+  passed: number;
+  total: number;
+  color: string;
+}) {
+  const percentage = total > 0 ? (passed / total) * 100 : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+            style={{ backgroundColor: `${color}20`, color }}
+          >
+            {phase}
+          </div>
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        <span className="text-sm font-mono text-muted-foreground">
+          {passed}/{total}
+        </span>
+      </div>
+      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${percentage}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SignalBadge({ signal }: { signal: string }) {
+  const config: Record<
+    string,
+    { variant: "success" | "default" | "outline" | "destructive"; label: string }
+  > = {
+    STRONG_BUY: { variant: "success", label: "STRONG BUY" },
+    BUY: { variant: "default", label: "BUY" },
+    WATCH: { variant: "outline", label: "WATCH" },
+    NEUTRAL: { variant: "outline", label: "NEUTRAL" },
+    AVOID: { variant: "destructive", label: "AVOID" },
+  };
+  const { variant, label } = config[signal] || {
+    variant: "outline" as const,
+    label: signal,
+  };
+  return (
+    <Badge variant={variant} className="text-[10px]">
+      {label}
+    </Badge>
+  );
+}
+
+function PhaseIndicator({ passed }: { passed: boolean }) {
+  return (
+    <div
+      className={`w-3 h-3 rounded-full ${passed ? "bg-accent" : "bg-secondary"}`}
+    />
+  );
+}
+
+function FrameworkCard({
+  icon: Icon,
+  phase,
+  title,
+  items,
+  color,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  phase: number;
+  title: string;
+  items: string[];
+  color: string;
+}) {
+  return (
+    <Card className="bg-card/50 backdrop-blur border-border hover:border-primary/30 transition-colors">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: `${color}20`, color }}
+          >
+            <Icon className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-mono">
+              Phase {phase}
+            </p>
+            <h3 className="font-semibold text-sm">{title}</h3>
+          </div>
+        </div>
+        <ul className="space-y-2">
+          {items.map((item, i) => (
+            <li
+              key={i}
+              className="text-xs text-muted-foreground flex items-start gap-2"
+            >
+              <CheckCircle2
+                className="w-3 h-3 mt-0.5 flex-shrink-0"
+                style={{ color }}
+              />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
