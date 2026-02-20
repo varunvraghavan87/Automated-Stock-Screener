@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -27,14 +28,19 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
+  ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
+import { PaperBuyDialog } from "@/components/trade-actions/PaperBuyDialog";
+import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
+import type { ScreenerResult } from "@/lib/types";
 
 export default function DashboardPage() {
   const { results, mode, loading, lastRefresh, kiteStatus, refresh } =
     useScreenerData();
+  const [buyingStock, setBuyingStock] = useState<ScreenerResult | null>(null);
 
   const strongBuys = results.filter((r) => r.signal === "STRONG_BUY");
   const buys = results.filter((r) => r.signal === "BUY");
@@ -328,6 +334,9 @@ export default function DashboardPage() {
                     <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground hidden lg:table-cell">
                       Phases
                     </th>
+                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -391,6 +400,30 @@ export default function DashboardPage() {
                           <PhaseIndicator passed={result.phase5VolatilityPass} />
                           <PhaseIndicator
                             passed={result.phase6.riskRewardRatio >= 2}
+                          />
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setBuyingStock(result)}
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+                            Buy
+                          </Button>
+                          <WatchlistButton
+                            stock={{
+                              symbol: result.stock.symbol,
+                              name: result.stock.name,
+                              exchange: result.stock.exchange,
+                              sector: result.stock.sector,
+                              lastPrice: result.stock.lastPrice,
+                              signal: result.signal,
+                              overallScore: result.overallScore,
+                            }}
                           />
                         </div>
                       </td>
@@ -472,6 +505,25 @@ export default function DashboardPage() {
           />
         </div>
       </main>
+
+      {/* Paper Buy Dialog */}
+      {buyingStock && (
+        <PaperBuyDialog
+          open={!!buyingStock}
+          onOpenChange={(open) => !open && setBuyingStock(null)}
+          stock={{
+            symbol: buyingStock.stock.symbol,
+            name: buyingStock.stock.name,
+            exchange: buyingStock.stock.exchange,
+            sector: buyingStock.stock.sector,
+            lastPrice: buyingStock.stock.lastPrice,
+            signal: buyingStock.signal,
+            overallScore: buyingStock.overallScore,
+            stopLoss: buyingStock.phase6.stopLoss,
+            target: buyingStock.phase6.target,
+          }}
+        />
+      )}
     </div>
   );
 }

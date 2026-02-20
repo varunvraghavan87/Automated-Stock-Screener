@@ -29,6 +29,7 @@ import {
   WifiOff,
   Link2,
   Link2Off,
+  ShoppingCart,
 } from "lucide-react";
 import {
   type ScreenerConfig,
@@ -37,6 +38,8 @@ import {
 } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
+import { PaperBuyDialog } from "@/components/trade-actions/PaperBuyDialog";
+import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
 
 export default function ScreenerPage() {
   const [config, setConfig] = useState<ScreenerConfig>(DEFAULT_SCREENER_CONFIG);
@@ -44,6 +47,7 @@ export default function ScreenerPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [signalFilter, setSignalFilter] = useState<string>("all");
   const [showConfig, setShowConfig] = useState(false);
+  const [buyingStock, setBuyingStock] = useState<ScreenerResult | null>(null);
 
   const {
     results,
@@ -443,6 +447,7 @@ export default function ScreenerPage() {
                     : result.stock.symbol
                 )
               }
+              onBuy={() => setBuyingStock(result)}
             />
           ))}
         </div>
@@ -455,6 +460,25 @@ export default function ScreenerPage() {
           </Card>
         )}
       </main>
+
+      {/* Paper Buy Dialog */}
+      {buyingStock && (
+        <PaperBuyDialog
+          open={!!buyingStock}
+          onOpenChange={(open) => !open && setBuyingStock(null)}
+          stock={{
+            symbol: buyingStock.stock.symbol,
+            name: buyingStock.stock.name,
+            exchange: buyingStock.stock.exchange,
+            sector: buyingStock.stock.sector,
+            lastPrice: buyingStock.stock.lastPrice,
+            signal: buyingStock.signal,
+            overallScore: buyingStock.overallScore,
+            stopLoss: buyingStock.phase6.stopLoss,
+            target: buyingStock.phase6.target,
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -463,10 +487,12 @@ function StockRow({
   result,
   expanded,
   onToggle,
+  onBuy,
 }: {
   result: ScreenerResult;
   expanded: boolean;
   onToggle: () => void;
+  onBuy: () => void;
 }) {
   const signalColors: Record<string, string> = {
     STRONG_BUY: "text-accent",
@@ -566,6 +592,30 @@ function StockRow({
           <PhaseChip phase={4} passed={result.phase4VolumePass} />
           <PhaseChip phase={5} passed={result.phase5VolatilityPass} />
           <PhaseChip phase={6} passed={result.phase6.riskRewardRatio >= 2} />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onBuy}
+          >
+            <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+            Buy
+          </Button>
+          <WatchlistButton
+            stock={{
+              symbol: result.stock.symbol,
+              name: result.stock.name,
+              exchange: result.stock.exchange,
+              sector: result.stock.sector,
+              lastPrice: result.stock.lastPrice,
+              signal: result.signal,
+              overallScore: result.overallScore,
+            }}
+          />
         </div>
 
         {/* Expand */}

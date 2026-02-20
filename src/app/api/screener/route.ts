@@ -5,6 +5,7 @@ import { KiteAPI } from "@/lib/kite-api";
 import { LiveDataService, NIFTY_500_SYMBOLS } from "@/lib/live-data-service";
 import { getSession } from "@/lib/kite-session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { acquireKiteLock, releaseKiteLock } from "@/lib/kite-lock";
 import {
   type ScreenerConfig,
   DEFAULT_SCREENER_CONFIG,
@@ -30,6 +31,14 @@ export async function GET() {
   let mode = "demo";
 
   if (session) {
+    // Acquire lock before making Kite API calls
+    const locked = await acquireKiteLock("screener", 300_000);
+    if (!locked) {
+      return NextResponse.json(
+        { error: "Another API operation is in progress. Please try again." },
+        { status: 503 }
+      );
+    }
     try {
       const kite = new KiteAPI({
         apiKey: session.apiKey,
@@ -41,6 +50,8 @@ export async function GET() {
     } catch (error) {
       console.error("Kite API failed, falling back to demo:", error);
       // Fall through to demo mode
+    } finally {
+      releaseKiteLock();
     }
   }
 
@@ -88,6 +99,14 @@ export async function POST(request: Request) {
   const kiteAccessToken = session?.accessToken || process.env.KITE_ACCESS_TOKEN;
 
   if (kiteApiKey && kiteAccessToken) {
+    // Acquire lock before making Kite API calls
+    const locked = await acquireKiteLock("screener", 300_000);
+    if (!locked) {
+      return NextResponse.json(
+        { error: "Another API operation is in progress. Please try again." },
+        { status: 503 }
+      );
+    }
     try {
       const kite = new KiteAPI({
         apiKey: kiteApiKey,
@@ -99,6 +118,7 @@ export async function POST(request: Request) {
     } catch (error) {
       // If session auth failed, return error. If env var auth, fall back silently.
       if (session) {
+        releaseKiteLock();
         return NextResponse.json(
           {
             error: "Kite API connection failed",
@@ -110,6 +130,8 @@ export async function POST(request: Request) {
       }
       // Env var auth failed — fall back to demo silently
       console.error("Kite env var auth failed, using demo data:", error);
+    } finally {
+      releaseKiteLock();
     }
   }
 

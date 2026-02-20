@@ -171,6 +171,99 @@ export interface ScreenerConfig {
   maxCapitalRisk: number; // %
 }
 
+// ---- Paper Trade Types ----
+
+export interface PaperTrade {
+  id: string;
+  userId: string;
+  symbol: string;
+  exchange: string;
+  name: string;
+  sector: string;
+  quantity: number;
+  entryPrice: number;
+  entryDate: string;
+  stopLoss: number | null;
+  targetPrice: number | null;
+  signal: string | null;
+  overallScore: number | null;
+  currentPrice: number | null;
+  lastPriceUpdate: string | null;
+  status: "open" | "closed";
+  exitPrice: number | null;
+  exitDate: string | null;
+  exitReason: string | null;
+  realizedPnl: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaperTradeInput {
+  symbol: string;
+  exchange: string;
+  name: string;
+  sector: string;
+  quantity: number;
+  entryPrice: number;
+  stopLoss?: number;
+  targetPrice?: number;
+  signal?: string;
+  overallScore?: number;
+  notes?: string;
+}
+
+export interface PaperTradeCloseInput {
+  exitPrice: number;
+  exitReason?: "manual" | "stop_loss_hit" | "target_hit";
+}
+
+// ---- Watchlist Types ----
+
+export interface WatchlistItem {
+  id: string;
+  userId: string;
+  symbol: string;
+  exchange: string;
+  name: string;
+  sector: string;
+  addedPrice: number;
+  currentPrice: number | null;
+  lastPriceUpdate: string | null;
+  targetBuy: number | null;
+  targetSell: number | null;
+  signal: string | null;
+  overallScore: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WatchlistInput {
+  symbol: string;
+  exchange: string;
+  name: string;
+  sector: string;
+  addedPrice: number;
+  targetBuy?: number;
+  targetSell?: number;
+  signal?: string;
+  overallScore?: number;
+  notes?: string;
+}
+
+// ---- Price Update Types ----
+
+export interface PriceUpdateResult {
+  symbol: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  updatedAt: string;
+}
+
+// ---- Screener Config ----
+
 export const DEFAULT_SCREENER_CONFIG: ScreenerConfig = {
   minAvgDailyTurnover: 20,
   excludeASMGSM: true,

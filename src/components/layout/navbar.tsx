@@ -7,6 +7,8 @@ import {
   BarChart3,
   Calculator,
   Filter,
+  LineChart,
+  Star,
   Zap,
   User,
   LogOut,
@@ -27,6 +29,8 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
   { href: "/screener", label: "Screener", icon: Filter },
   { href: "/signals", label: "Signals", icon: Zap },
+  { href: "/paper-trade", label: "Paper Trade", icon: LineChart },
+  { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/calculator", label: "Calculator", icon: Calculator },
 ];
 
