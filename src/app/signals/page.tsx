@@ -50,7 +50,7 @@ import { useScreenerData } from "@/hooks/useScreenerData";
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8", "#ef4444"];
 
 export default function SignalsPage() {
-  const { results, mode, loading, lastRefresh, refresh } = useScreenerData();
+  const { results, mode, loading, lastRefresh, marketRegime, refresh } = useScreenerData();
 
   const signalDistribution = useMemo(() => {
     const dist: Record<string, number> = {
@@ -89,9 +89,11 @@ export default function SignalsPage() {
     const pick = topPicks[0];
     return [
       {
-        metric: "RSI Zone",
+        metric: "RSI Quality",
         value:
-          pick.indicators.rsi14 >= 40 && pick.indicators.rsi14 <= 75 ? 90 : 30,
+          pick.phase3Details.rsiTierScore >= 4 ? 90 :
+          pick.phase3Details.rsiTierScore >= 2 ? 65 :
+          pick.phase3Details.rsiTierScore >= 0 ? 40 : 15,
       },
       {
         metric: "Trend (ADX)",
@@ -206,6 +208,19 @@ export default function SignalsPage() {
                 <WifiOff className="w-3 h-3" />
               )}
               {mode === "live" ? "LIVE" : "DEMO"}
+            </Badge>
+            <Badge
+              variant={
+                marketRegime.regime === "BULL"
+                  ? "success"
+                  : marketRegime.regime === "BEAR"
+                    ? "destructive"
+                    : "outline"
+              }
+              className="gap-1 text-[10px]"
+            >
+              <Activity className="w-3 h-3" />
+              {marketRegime.regime}
             </Badge>
             <div className="text-xs text-muted-foreground font-mono">
               {lastRefresh.toLocaleTimeString("en-IN")}

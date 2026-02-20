@@ -1,7 +1,12 @@
 "use client";
 
 import { useScreenerContext } from "@/contexts/ScreenerContext";
-import type { ScreenerResult, ScreenerConfig } from "@/lib/types";
+import type {
+  ScreenerResult,
+  ScreenerConfig,
+  MarketRegimeInfo,
+  AdaptiveThresholds,
+} from "@/lib/types";
 
 interface KiteStatus {
   connected: boolean;
@@ -16,6 +21,8 @@ export interface UseScreenerDataReturn {
   loading: boolean;
   lastRefresh: Date;
   kiteStatus: KiteStatus;
+  marketRegime: MarketRegimeInfo;
+  adaptiveThresholds: AdaptiveThresholds;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { MOCK_STOCKS } from "@/lib/mock-data";
-import { runScreener } from "@/lib/screener-engine";
+import {
+  runScreener,
+  detectMarketRegime,
+  getAdaptiveThresholds,
+} from "@/lib/screener-engine";
 import { KiteAPI } from "@/lib/kite-api";
 import { LiveDataService, NIFTY_500_SYMBOLS } from "@/lib/live-data-service";
 import { getSession } from "@/lib/kite-session";
@@ -8,6 +12,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { acquireKiteLock, releaseKiteLock } from "@/lib/kite-lock";
 import {
   type ScreenerConfig,
+  type MarketRegimeInfo,
   DEFAULT_SCREENER_CONFIG,
 } from "@/lib/types";
 import { ScreenerConfigSchema } from "@/lib/validation";
@@ -30,6 +35,7 @@ export async function GET() {
   const session = await getSession();
   let stocks = MOCK_STOCKS;
   let mode = "demo";
+  let marketRegime: MarketRegimeInfo | null = null;
 
   if (session) {
     // Acquire lock before making Kite API calls
@@ -46,7 +52,9 @@ export async function GET() {
         accessToken: session.accessToken,
       });
       const liveService = new LiveDataService(kite);
-      stocks = await liveService.fetchAndComputeIndicators(NIFTY_500_SYMBOLS);
+      const liveData = await liveService.fetchAndComputeIndicatorsWithRegime(NIFTY_500_SYMBOLS);
+      stocks = liveData.stocks;
+      marketRegime = liveData.marketRegime;
       mode = "live";
     } catch (error) {
       console.error("Kite API failed, falling back to demo:", error);
@@ -56,12 +64,20 @@ export async function GET() {
     }
   }
 
-  const results = runScreener(stocks);
+  // Use demo regime if no live regime available
+  if (!marketRegime) {
+    marketRegime = detectMarketRegime(22500, 22400, 22200, 28, null);
+  }
+
+  const adaptiveThresholds = getAdaptiveThresholds(marketRegime.regime);
+  const results = runScreener(stocks, DEFAULT_SCREENER_CONFIG, adaptiveThresholds);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     mode,
     totalScanned: stocks.length,
+    marketRegime,
+    adaptiveThresholds,
     pipeline: {
       phase1: results.filter((r) => r.phase1Pass).length,
       phase2: results.filter((r) => r.phase2Pass).length,
@@ -107,6 +123,7 @@ export async function POST(request: Request) {
 
   let stocks = MOCK_STOCKS;
   let mode = "demo";
+  let marketRegime: MarketRegimeInfo | null = null;
 
   // Priority: 1) Active Kite session (cookie), 2) Env vars, 3) Demo mode
   const session = await getSession();
@@ -128,7 +145,9 @@ export async function POST(request: Request) {
         accessToken: kiteAccessToken,
       });
       const liveService = new LiveDataService(kite);
-      stocks = await liveService.fetchAndComputeIndicators(symbols);
+      const liveData = await liveService.fetchAndComputeIndicatorsWithRegime(symbols);
+      stocks = liveData.stocks;
+      marketRegime = liveData.marketRegime;
       mode = "live";
     } catch (error) {
       // If session auth failed, return error. If env var auth, fall back silently.
@@ -149,13 +168,21 @@ export async function POST(request: Request) {
     }
   }
 
-  const results = runScreener(stocks, config);
+  // Use demo regime if no live regime available
+  if (!marketRegime) {
+    marketRegime = detectMarketRegime(22500, 22400, 22200, 28, null);
+  }
+
+  const adaptiveThresholds = getAdaptiveThresholds(marketRegime.regime, config);
+  const results = runScreener(stocks, config, adaptiveThresholds);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     mode,
     config,
     totalScanned: stocks.length,
+    marketRegime,
+    adaptiveThresholds,
     pipeline: {
       phase1: results.filter((r) => r.phase1Pass).length,
       phase2: results.filter((r) => r.phase2Pass).length,

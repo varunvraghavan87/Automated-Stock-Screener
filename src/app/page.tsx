@@ -35,10 +35,10 @@ import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { PaperBuyDialog } from "@/components/trade-actions/PaperBuyDialog";
 import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
-import type { ScreenerResult } from "@/lib/types";
+import type { ScreenerResult, MarketRegimeInfo } from "@/lib/types";
 
 export default function DashboardPage() {
-  const { results, mode, loading, lastRefresh, kiteStatus, refresh } =
+  const { results, mode, loading, lastRefresh, kiteStatus, marketRegime, adaptiveThresholds, refresh } =
     useScreenerData();
   const [buyingStock, setBuyingStock] = useState<ScreenerResult | null>(null);
 
@@ -93,6 +93,9 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+
+        {/* Market Regime Badge */}
+        <MarketRegimeBanner regime={marketRegime} />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -595,6 +598,86 @@ function PhaseIndicator({ passed }: { passed: boolean }) {
     <div
       className={`w-3 h-3 rounded-full ${passed ? "bg-accent" : "bg-secondary"}`}
     />
+  );
+}
+
+function MarketRegimeBanner({ regime }: { regime: MarketRegimeInfo }) {
+  const regimeConfig: Record<
+    string,
+    { color: string; bg: string; border: string; icon: string; label: string }
+  > = {
+    BULL: {
+      color: "text-accent",
+      bg: "bg-accent/10",
+      border: "border-accent/30",
+      icon: "text-accent",
+      label: "BULL MARKET",
+    },
+    BEAR: {
+      color: "text-destructive",
+      bg: "bg-destructive/10",
+      border: "border-destructive/30",
+      icon: "text-destructive",
+      label: "BEAR MARKET",
+    },
+    SIDEWAYS: {
+      color: "text-[#f59e0b]",
+      bg: "bg-[#f59e0b]/10",
+      border: "border-[#f59e0b]/30",
+      icon: "text-[#f59e0b]",
+      label: "SIDEWAYS",
+    },
+  };
+
+  const cfg = regimeConfig[regime.regime] || regimeConfig.SIDEWAYS;
+
+  return (
+    <Card className={`mb-6 ${cfg.bg} backdrop-blur ${cfg.border}`}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${cfg.bg}`}>
+              <Activity className={`w-5 h-5 ${cfg.icon}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-bold ${cfg.color}`}>
+                  Market Regime: {cfg.label}
+                </span>
+                {regime.indiaVIX !== null && (
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    VIX: {regime.indiaVIX.toFixed(1)}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+                {regime.description}
+              </p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-4 text-xs text-muted-foreground font-mono">
+            <div>
+              <span className="text-muted-foreground">Nifty: </span>
+              <span className="text-foreground font-semibold">
+                {regime.niftyClose.toFixed(0)}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">EMA20: </span>
+              <span className="text-foreground">{regime.niftyEMA20.toFixed(0)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">EMA50: </span>
+              <span className="text-foreground">{regime.niftyEMA50.toFixed(0)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">ADX: </span>
+              <span className="text-foreground">{regime.niftyADX.toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

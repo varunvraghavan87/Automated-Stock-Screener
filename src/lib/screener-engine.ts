@@ -7,8 +7,126 @@ import {
   type Phase4VolumeDetails,
   type Phase5VolatilityDetails,
   type Phase4RiskParams,
+  type MarketRegime,
+  type MarketRegimeInfo,
+  type AdaptiveThresholds,
   DEFAULT_SCREENER_CONFIG,
 } from "./types";
+
+// ---- Market Regime Detection ----
+
+/**
+ * Detect current market regime from Nifty 50 indicators.
+ *
+ * Bull:     Nifty > EMA50 AND ADX > 20 AND EMA20 > EMA50
+ * Bear:     Nifty < EMA50 AND ADX > 20 AND EMA20 < EMA50
+ * Sideways: ADX < 20 (no trend regardless of price)
+ */
+export function detectMarketRegime(
+  niftyClose: number,
+  niftyEMA20: number,
+  niftyEMA50: number,
+  niftyADX: number,
+  indiaVIX: number | null = null
+): MarketRegimeInfo {
+  let regime: MarketRegime;
+  let description: string;
+
+  if (niftyADX < 20) {
+    regime = "SIDEWAYS";
+    description = `Nifty in sideways range — ADX at ${niftyADX.toFixed(1)} (below 20). Trend-following setups unreliable; tighter filters applied.`;
+  } else if (niftyClose > niftyEMA50 && niftyEMA20 > niftyEMA50) {
+    regime = "BULL";
+    description = `Nifty in uptrend — trading above EMA50 (${niftyEMA50.toFixed(0)}), EMA20 > EMA50, ADX ${niftyADX.toFixed(1)}. Standard thresholds active.`;
+  } else if (niftyClose < niftyEMA50 && niftyEMA20 < niftyEMA50) {
+    regime = "BEAR";
+    description = `Nifty in downtrend — trading below EMA50 (${niftyEMA50.toFixed(0)}), EMA20 < EMA50, ADX ${niftyADX.toFixed(1)}. Stricter filters applied to avoid catching falling knives.`;
+  } else {
+    // Transitional — treat as sideways for safety
+    regime = "SIDEWAYS";
+    description = `Nifty in transitional phase — mixed signals between EMAs. ADX ${niftyADX.toFixed(1)}. Cautious thresholds applied.`;
+  }
+
+  // Elevated VIX amplifies caution
+  if (indiaVIX !== null && indiaVIX > 25) {
+    description += ` India VIX elevated at ${indiaVIX.toFixed(1)} — expect wider stops and higher volatility.`;
+  }
+
+  return {
+    regime,
+    niftyClose,
+    niftyEMA20,
+    niftyEMA50,
+    niftyADX,
+    indiaVIX,
+    description,
+  };
+}
+
+/**
+ * Get adaptive thresholds based on the current market regime.
+ *
+ * In bear/sideways markets, we demand stronger signals to avoid false positives.
+ * In bull markets, standard thresholds let us catch more setups (higher base rate).
+ */
+export function getAdaptiveThresholds(
+  regime: MarketRegime,
+  baseConfig: ScreenerConfig = DEFAULT_SCREENER_CONFIG
+): AdaptiveThresholds {
+  switch (regime) {
+    case "BULL":
+      return {
+        minADX: baseConfig.minADX,           // 25 (standard)
+        rsiLow: baseConfig.rsiLow,           // 40
+        rsiHigh: baseConfig.rsiHigh,         // 75
+        volumeMultiplier: baseConfig.volumeMultiplier, // 1.2x
+        minRiskReward: baseConfig.minRiskReward,       // 2:1
+        strongBuyThreshold: 75,
+        buyThreshold: 55,
+        watchThreshold: 35,
+      };
+    case "SIDEWAYS":
+      return {
+        minADX: Math.round(baseConfig.minADX * 1.2),  // 30 (+20%)
+        rsiLow: 45,                                     // tighter range
+        rsiHigh: 65,
+        volumeMultiplier: baseConfig.volumeMultiplier * 1.25, // 1.5x
+        minRiskReward: 2.5,                              // demand more reward
+        strongBuyThreshold: 80,                          // harder to qualify
+        buyThreshold: 60,
+        watchThreshold: 40,
+      };
+    case "BEAR":
+      return {
+        minADX: Math.round(baseConfig.minADX * 1.4),  // 35 (+40%)
+        rsiLow: 50,                                     // very tight
+        rsiHigh: 60,
+        volumeMultiplier: baseConfig.volumeMultiplier * 1.67, // ~2.0x
+        minRiskReward: 3,                                // high reward demanded
+        strongBuyThreshold: 85,                          // very hard to qualify
+        buyThreshold: 65,
+        watchThreshold: 45,
+      };
+  }
+}
+
+/**
+ * Apply adaptive thresholds to a ScreenerConfig, returning a new config
+ * with regime-adjusted values merged in.
+ */
+export function applyAdaptiveConfig(
+  baseConfig: ScreenerConfig,
+  thresholds: AdaptiveThresholds
+): ScreenerConfig {
+  return {
+    ...baseConfig,
+    minADX: thresholds.minADX,
+    rsiLow: thresholds.rsiLow,
+    rsiHigh: thresholds.rsiHigh,
+    volumeMultiplier: thresholds.volumeMultiplier,
+    minRiskReward: thresholds.minRiskReward,
+  };
+}
 
 // Phase 1: Universe & Liquidity Filter
 export function phase1Filter(
@@ -61,6 +179,15 @@ export function phase2Filter(
   return true;
 }
 
+// RSI Tier Classification — maps RSI value to a quality tier and score
+function classifyRSITier(rsi: number): { tier: Phase3Details['rsiTier']; score: number } {
+  if (rsi >= 45 && rsi <= 55) return { tier: 'optimal', score: 5 };
+  if (rsi > 55 && rsi <= 65) return { tier: 'good', score: 4 };
+  if ((rsi >= 40 && rsi < 45) || (rsi > 65 && rsi <= 70)) return { tier: 'caution', score: 2 };
+  if (rsi > 70 && rsi <= 75) return { tier: 'exhaustion', score: 0 };
+  return { tier: 'penalty', score: -3 }; // RSI > 75 or < 40
+}
+
 // Phase 3: Momentum Signal Detection
 export function phase3Analyze(
   stock: StockData,
@@ -75,9 +202,10 @@ export function phase3Analyze(
   const emaProximity = Math.min(Math.abs(distTo20), Math.abs(distTo50));
   const pullbackToEMA = emaProximity <= config.maxEMAProximity;
 
-  // RSI in momentum zone (40-75)
-  const rsiInZone =
-    indicators.rsi14 >= config.rsiLow && indicators.rsi14 <= config.rsiHigh;
+  // RSI tiered scoring (replaces flat zone check)
+  const { tier: rsiTier, score: rsiTierScore } = classifyRSITier(indicators.rsi14);
+  // rsiInZone remains true if score >= 0 (backward compat for phase3Pass)
+  const rsiInZone = rsiTierScore >= 0;
 
   // Volume declining on pullback
   const volumeDecline = stock.volume < indicators.volumeSMA20;
@@ -98,6 +226,8 @@ export function phase3Analyze(
     pullbackToEMA,
     rsiInZone,
     rsiValue: indicators.rsi14,
+    rsiTier,
+    rsiTierScore,
     volumeDecline,
     candlestickPattern: null,
     emaProximity,
@@ -120,6 +250,37 @@ export function phase3Pass(details: Phase3Details): boolean {
   return passCount >= 3; // At least 3 of 5 conditions
 }
 
+// Volume Trend Classification — detects 3-bar acceleration/deceleration
+function classifyVolumeTrend(
+  volumeRecent3: [number, number, number]
+): { trend: Phase4VolumeDetails['volumeTrend']; score: number } {
+  const [vol2ago, vol1ago, volNow] = volumeRecent3;
+
+  // All zero or invalid → steady
+  if (volNow === 0 && vol1ago === 0 && vol2ago === 0) {
+    return { trend: 'steady', score: 2 };
+  }
+
+  // Accelerating: each bar higher than the previous
+  if (volNow > vol1ago && vol1ago > vol2ago) {
+    return { trend: 'accelerating', score: 5 };
+  }
+
+  // Declining: each bar lower than the previous
+  if (volNow < vol1ago && vol1ago < vol2ago) {
+    return { trend: 'declining', score: -3 };
+  }
+
+  // Steady: current above avg of prior two, but not strictly accelerating
+  const avgPrior = (vol2ago + vol1ago) / 2;
+  if (volNow > avgPrior) {
+    return { trend: 'steady', score: 2 };
+  }
+
+  // Default: declining tendency
+  return { trend: 'declining', score: -3 };
+}
+
 // Phase 4: Volume Confirmation
 export function phase4VolumeAnalyze(
   stock: StockData,
@@ -130,7 +291,19 @@ export function phase4VolumeAnalyze(
   const volumeAboveAvg = stock.volume > indicators.volumeSMA20 * config.volumeMultiplier;
   const mfiHealthy = indicators.mfi14 >= config.mfiLow && indicators.mfi14 <= config.mfiHigh;
 
-  return { obvTrendingUp, volumeAboveAvg, mfiHealthy };
+  // Volume trend analysis (3-bar acceleration)
+  const { trend: volumeTrend, score: volumeTrendScore } = classifyVolumeTrend(
+    indicators.volumeRecent3
+  );
+
+  return {
+    obvTrendingUp,
+    volumeAboveAvg,
+    mfiHealthy,
+    volumeTrend,
+    volumeTrendScore,
+    vroc20: indicators.vroc20,
+  };
 }
 
 export function phase4VolumePass(
@@ -216,19 +389,23 @@ function calculateScore(
   if (indicators.sarTrend === "up") score += 2;
   if (indicators.ichimokuCloudSignal === "above") score += 2;
 
-  // Phase 3: Momentum (25 pts)
+  // Phase 3: Momentum (25 pts max)
   if (phase3.pullbackToEMA) score += 5;
-  if (phase3.rsiInZone) score += 5;
+  // Tiered RSI scoring: -3 to +5 based on quality zone
+  score += phase3.rsiTierScore;
   if (phase3.rocPositive) score += 4;
   if (phase3.plusDIAboveMinusDI) score += 4;
   if (phase3.stochasticBullish) score += 3;
   if (phase3.macdBullish) score += 2;
   if (phase3.candlestickPattern) score += 2;
 
-  // Phase 4: Volume (15 pts)
+  // Phase 4: Volume (20 pts max — expanded with trend analysis)
   if (phase4Vol.obvTrendingUp) score += 5;
-  if (phase4Vol.volumeAboveAvg) score += 5;
   if (phase4Vol.mfiHealthy) score += 5;
+  // Volume trend: -3 (declining) to +5 (accelerating), replaces flat volumeAboveAvg check
+  score += phase4Vol.volumeTrendScore;
+  // Bonus if volume is above average (additional confirmation)
+  if (phase4Vol.volumeAboveAvg) score += 3;
 
   // Phase 5: Volatility (10 pts)
   if (phase5Vola.atrReasonable) score += 4;
@@ -247,11 +424,16 @@ function determineSignal(
   phase1: boolean,
   phase2: boolean,
   phase3Pass: boolean,
-  phase4VolPass: boolean
+  phase4VolPass: boolean,
+  thresholds?: AdaptiveThresholds
 ): ScreenerResult["signal"] {
-  if (phase1 && phase2 && phase3Pass && phase4VolPass && score >= 75) return "STRONG_BUY";
-  if (phase1 && phase2 && phase3Pass && score >= 55) return "BUY";
-  if (phase1 && phase2 && score >= 35) return "WATCH";
+  const strongBuy = thresholds?.strongBuyThreshold ?? 75;
+  const buy = thresholds?.buyThreshold ?? 55;
+  const watch = thresholds?.watchThreshold ?? 35;
+
+  if (phase1 && phase2 && phase3Pass && phase4VolPass && score >= strongBuy) return "STRONG_BUY";
+  if (phase1 && phase2 && phase3Pass && score >= buy) return "BUY";
+  if (phase1 && phase2 && score >= watch) return "WATCH";
   if (phase1) return "NEUTRAL";
   return "AVOID";
 }
@@ -280,9 +462,17 @@ function generateRationale(
       `pulling back to EMA support (${phase3.emaProximity.toFixed(1)}% away)`
     );
   }
-  if (phase3.rsiInZone) {
-    parts.push(`RSI at ${indicators.rsi14.toFixed(1)}`);
-  }
+  // RSI with tier context
+  const rsiTierLabels: Record<string, string> = {
+    optimal: 'optimal pullback zone',
+    good: 'healthy continuation',
+    caution: 'caution zone',
+    exhaustion: 'exhaustion zone',
+    penalty: 'overbought/broken',
+  };
+  parts.push(
+    `RSI ${indicators.rsi14.toFixed(1)} — ${rsiTierLabels[phase3.rsiTier]} (${phase3.rsiTierScore > 0 ? '+' : ''}${phase3.rsiTierScore} pts)`
+  );
   if (phase3.rocPositive) {
     parts.push(`ROC positive (${indicators.roc14.toFixed(1)}%)`);
   }
@@ -291,6 +481,13 @@ function generateRationale(
   if (phase4Vol.obvTrendingUp) {
     parts.push("OBV trending up");
   }
+  // Volume trend context
+  const volTrendLabels: Record<string, string> = {
+    accelerating: 'volume accelerating (3-bar rising)',
+    steady: 'volume steady',
+    declining: 'volume declining — caution',
+  };
+  parts.push(volTrendLabels[phase4Vol.volumeTrend]);
   if (phase4Vol.mfiHealthy) {
     parts.push(`MFI at ${indicators.mfi14.toFixed(0)}`);
   }
@@ -312,25 +509,32 @@ function generateRationale(
 }
 
 // Main screener function — 6-stage pipeline
+// Accepts optional adaptive thresholds for regime-aware signal determination
 export function runScreener(
   stocks: Array<{ stock: StockData; indicators: TechnicalIndicators }>,
-  config: ScreenerConfig = DEFAULT_SCREENER_CONFIG
+  config: ScreenerConfig = DEFAULT_SCREENER_CONFIG,
+  adaptiveThresholds?: AdaptiveThresholds
 ): ScreenerResult[] {
   const results: ScreenerResult[] = [];
 
+  // If adaptive thresholds provided, merge regime-specific values into config
+  const effectiveConfig = adaptiveThresholds
+    ? applyAdaptiveConfig(config, adaptiveThresholds)
+    : config;
+
   for (const { stock, indicators } of stocks) {
-    const p1 = phase1Filter(stock, config);
-    const p2 = p1 ? phase2Filter(indicators, stock.lastPrice, config) : false;
-    const p3Details = phase3Analyze(stock, indicators, config);
+    const p1 = phase1Filter(stock, effectiveConfig);
+    const p2 = p1 ? phase2Filter(indicators, stock.lastPrice, effectiveConfig) : false;
+    const p3Details = phase3Analyze(stock, indicators, effectiveConfig);
     const p3 = p2 ? phase3Pass(p3Details) : false;
-    const p4VolDetails = phase4VolumeAnalyze(stock, indicators, config);
-    const p4Vol = p3 ? phase4VolumePass(p4VolDetails, config) : false;
-    const p5VolaDetails = phase5VolatilityAnalyze(stock, indicators, config);
-    const p5Vola = p4Vol ? phase5VolatilityPass(p5VolaDetails, config) : false;
-    const p6 = phase6Calculate(stock.lastPrice, indicators.atr14, config);
+    const p4VolDetails = phase4VolumeAnalyze(stock, indicators, effectiveConfig);
+    const p4Vol = p3 ? phase4VolumePass(p4VolDetails, effectiveConfig) : false;
+    const p5VolaDetails = phase5VolatilityAnalyze(stock, indicators, effectiveConfig);
+    const p5Vola = p4Vol ? phase5VolatilityPass(p5VolaDetails, effectiveConfig) : false;
+    const p6 = phase6Calculate(stock.lastPrice, indicators.atr14, effectiveConfig);
 
     const score = calculateScore(p1, p2, p3Details, p4VolDetails, p5VolaDetails, indicators);
-    const signal = determineSignal(score, p1, p2, p3, p4Vol);
+    const signal = determineSignal(score, p1, p2, p3, p4Vol, adaptiveThresholds);
     const rationale = generateRationale(stock, indicators, p3Details, p4VolDetails, p5VolaDetails, p6);
 
     results.push({

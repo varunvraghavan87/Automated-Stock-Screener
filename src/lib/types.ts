@@ -32,6 +32,10 @@ export interface TechnicalIndicators {
   volumeSMA20: number;
   weekChange: number;
 
+  // Volume trend data (for 3-bar acceleration check)
+  volumeRecent3: [number, number, number]; // [vol[-2], vol[-1], vol[0]] — last 3 bars
+  vroc20: number; // Volume Rate of Change: (vol[0] / vol[-20]) * 100
+
   // MACD
   macdLine: number;
   macdSignal: number;
@@ -80,6 +84,32 @@ export interface TechnicalIndicators {
   ichimokuCloudSignal: "above" | "below" | "inside";
 }
 
+// ---- Market Regime Types ----
+
+export type MarketRegime = "BULL" | "BEAR" | "SIDEWAYS";
+
+export interface MarketRegimeInfo {
+  regime: MarketRegime;
+  niftyClose: number;
+  niftyEMA20: number;
+  niftyEMA50: number;
+  niftyADX: number;
+  indiaVIX: number | null; // null if not available
+  description: string;
+}
+
+// Adaptive thresholds that change per regime
+export interface AdaptiveThresholds {
+  minADX: number;
+  rsiLow: number;
+  rsiHigh: number;
+  volumeMultiplier: number;
+  minRiskReward: number;
+  strongBuyThreshold: number;
+  buyThreshold: number;
+  watchThreshold: number;
+}
+
 export interface ScreenerResult {
   stock: StockData;
   indicators: TechnicalIndicators;
@@ -97,10 +127,29 @@ export interface ScreenerResult {
   rationale: string;
 }
 
+export interface ScreenerResponse {
+  timestamp: string;
+  mode: "live" | "demo";
+  totalScanned: number;
+  marketRegime: MarketRegimeInfo;
+  adaptiveThresholds: AdaptiveThresholds;
+  pipeline: {
+    phase1: number;
+    phase2: number;
+    phase3: number;
+    phase4Volume: number;
+    phase5Volatility: number;
+  };
+  results: ScreenerResult[];
+  config?: ScreenerConfig;
+}
+
 export interface Phase3Details {
   pullbackToEMA: boolean;
   rsiInZone: boolean;
   rsiValue: number;
+  rsiTier: 'optimal' | 'good' | 'caution' | 'exhaustion' | 'penalty';
+  rsiTierScore: number; // Actual score awarded: -3 to 5
   volumeDecline: boolean;
   candlestickPattern: string | null;
   emaProximity: number; // % distance from nearest support EMA
@@ -114,6 +163,9 @@ export interface Phase4VolumeDetails {
   obvTrendingUp: boolean;
   volumeAboveAvg: boolean;
   mfiHealthy: boolean;
+  volumeTrend: 'accelerating' | 'steady' | 'declining';
+  volumeTrendScore: number; // Score contribution: -3, +2, or +5
+  vroc20: number; // Volume Rate of Change value
 }
 
 export interface Phase5VolatilityDetails {

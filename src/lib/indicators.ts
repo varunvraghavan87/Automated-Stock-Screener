@@ -712,6 +712,19 @@ export function calculateVWAP(
 }
 
 // ============================================================
+// Volume Rate of Change (VROC)
+// ============================================================
+export function calculateVROC(
+  volume: number[],
+  period: number = 20
+): number {
+  if (volume.length <= period) return 100; // Not enough data — return neutral
+  const current = volume[volume.length - 1];
+  const past = volume[volume.length - 1 - period];
+  return past === 0 ? 100 : (current / past) * 100;
+}
+
+// ============================================================
 // Accumulation/Distribution Line
 // ============================================================
 export function calculateADLine(

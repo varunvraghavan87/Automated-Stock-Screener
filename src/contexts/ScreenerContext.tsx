@@ -10,8 +10,17 @@ import {
   type ReactNode,
 } from "react";
 import { MOCK_STOCKS } from "@/lib/mock-data";
-import { runScreener } from "@/lib/screener-engine";
-import type { ScreenerResult, ScreenerConfig } from "@/lib/types";
+import {
+  runScreener,
+  detectMarketRegime,
+  getAdaptiveThresholds,
+} from "@/lib/screener-engine";
+import type {
+  ScreenerResult,
+  ScreenerConfig,
+  MarketRegimeInfo,
+  AdaptiveThresholds,
+} from "@/lib/types";
 
 interface KiteStatus {
   connected: boolean;
@@ -26,6 +35,8 @@ interface ScreenerContextValue {
   loading: boolean;
   lastRefresh: Date;
   kiteStatus: KiteStatus;
+  marketRegime: MarketRegimeInfo;
+  adaptiveThresholds: AdaptiveThresholds;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;
@@ -44,10 +55,16 @@ export function useScreenerContext(): ScreenerContextValue {
   return context;
 }
 
+// Default demo regime — assumes Nifty in bull market for mock data
+const DEFAULT_DEMO_REGIME: MarketRegimeInfo = detectMarketRegime(
+  22500, 22400, 22200, 28, null
+);
+
 export function ScreenerProvider({ children }: { children: ReactNode }) {
   // Initialize with client-side screener results (demo data)
+  const defaultThresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
   const [results, setResults] = useState<ScreenerResult[]>(() =>
-    runScreener(MOCK_STOCKS)
+    runScreener(MOCK_STOCKS, undefined, defaultThresholds)
   );
   const [mode, setMode] = useState<"live" | "demo">("demo");
   const [loading, setLoading] = useState(false);
@@ -56,6 +73,8 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
     connected: false,
     configured: false,
   });
+  const [marketRegime, setMarketRegime] = useState<MarketRegimeInfo>(DEFAULT_DEMO_REGIME);
+  const [adaptiveThresholds, setAdaptiveThresholds] = useState<AdaptiveThresholds>(defaultThresholds);
 
   // Track whether we've already done the initial auto-refresh
   const hasAutoRefreshed = useRef(false);
@@ -95,24 +114,39 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         setMode(data.mode === "live" ? "live" : "demo");
         setLastRefresh(new Date(data.timestamp));
 
+        // Update market regime & adaptive thresholds from API
+        if (data.marketRegime) {
+          setMarketRegime(data.marketRegime as MarketRegimeInfo);
+        }
+        if (data.adaptiveThresholds) {
+          setAdaptiveThresholds(data.adaptiveThresholds as AdaptiveThresholds);
+        }
+
         if (data.mode === "live" && data.results?.length > 0) {
           // Use full ScreenerResult[] from API (screener ran server-side with live Kite data)
           setResults(data.results as ScreenerResult[]);
         } else {
-          // Demo mode: run screener client-side with mock data
-          const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig);
+          // Demo mode: run screener client-side with mock data + adaptive thresholds
+          const regime = data.marketRegime || DEFAULT_DEMO_REGIME;
+          const thresholds = getAdaptiveThresholds(regime.regime, config as ScreenerConfig);
+          const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds);
           setResults(freshResults);
+          setMarketRegime(regime);
+          setAdaptiveThresholds(thresholds);
         }
 
         // Also refresh Kite status
         await checkKiteStatus();
       } catch (error) {
         console.error("Failed to refresh from API, using client-side data:", error);
-        // Fallback: re-run screener client-side
-        const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig);
+        // Fallback: re-run screener client-side with default regime
+        const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime, config as ScreenerConfig);
+        const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds);
         setResults(freshResults);
         setMode("demo");
         setLastRefresh(new Date());
+        setMarketRegime(DEFAULT_DEMO_REGIME);
+        setAdaptiveThresholds(thresholds);
       } finally {
         setLoading(false);
       }
@@ -145,9 +179,12 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
       setKiteStatus({ connected: false, configured: kiteStatus.configured });
       setMode("demo");
       // Revert to demo data since Kite is disconnected
-      const demoResults = runScreener(MOCK_STOCKS);
+      const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
+      const demoResults = runScreener(MOCK_STOCKS, undefined, thresholds);
       setResults(demoResults);
       setLastRefresh(new Date());
+      setMarketRegime(DEFAULT_DEMO_REGIME);
+      setAdaptiveThresholds(thresholds);
     } catch {
       // Silently fail
     }
@@ -161,6 +198,8 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         loading,
         lastRefresh,
         kiteStatus,
+        marketRegime,
+        adaptiveThresholds,
         refresh,
         checkKiteStatus,
         connectKite,

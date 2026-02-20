@@ -2,7 +2,8 @@
 // Fetches real-time + historical data and computes all technical indicators
 
 import { KiteAPI } from "./kite-api";
-import type { StockData, TechnicalIndicators } from "./types";
+import type { StockData, TechnicalIndicators, MarketRegimeInfo } from "./types";
+import { detectMarketRegime } from "./screener-engine";
 import {
   calculateEMA,
   calculateRSI,
@@ -21,6 +22,7 @@ import {
   calculateIchimokuCloud,
   calculateRelativeStrength,
   detectCandlestickPattern,
+  calculateVROC,
 } from "./indicators";
 
 // Sector mapping for common NSE stocks (extend as needed)
@@ -103,10 +105,17 @@ export class LiveDataService {
     this.kite = kite;
   }
 
-  async fetchAndComputeIndicators(
+  /**
+   * Fetch all stock data and indicators AND compute market regime from Nifty 50.
+   * Returns both the stock results and the regime info.
+   */
+  async fetchAndComputeIndicatorsWithRegime(
     symbols: string[],
     exchange: string = "NSE"
-  ): Promise<Array<{ stock: StockData; indicators: TechnicalIndicators }>> {
+  ): Promise<{
+    stocks: Array<{ stock: StockData; indicators: TechnicalIndicators }>;
+    marketRegime: MarketRegimeInfo;
+  }> {
     // 1. Fetch instruments to get instrument tokens
     const instruments = await this.kite.fetchInstruments(exchange);
     const instrumentMap = new Map(
@@ -114,8 +123,21 @@ export class LiveDataService {
     );
 
     // 2. Fetch current quotes in batches of 250 (Kite API limit)
+    //    Also include India VIX in the first batch for regime detection
     const quoteSymbols = symbols.map((s) => `${exchange}:${s}`);
     const quotes = new Map<string, { last_price: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number; change: number }>();
+
+    // Fetch India VIX separately (1 extra quote call)
+    let indiaVIX: number | null = null;
+    try {
+      const vixQuotes = await this.kite.fetchQuotes(["NSE:INDIA VIX"]);
+      const vixData = vixQuotes.get("NSE:INDIA VIX");
+      if (vixData) {
+        indiaVIX = vixData.last_price;
+      }
+    } catch {
+      // India VIX is optional — regime detection works without it
+    }
 
     for (let i = 0; i < quoteSymbols.length; i += QUOTE_BATCH_SIZE) {
       const batch = quoteSymbols.slice(i, i + QUOTE_BATCH_SIZE);
@@ -130,7 +152,7 @@ export class LiveDataService {
     const from = new Date();
     from.setDate(from.getDate() - 365);
 
-    // 4. Fetch Nifty 50 historical for relative strength
+    // 4. Fetch Nifty 50 historical for relative strength AND regime detection
     let niftyHistory: HistoricalCandle[] = [];
     try {
       niftyHistory = await this.kite.fetchHistorical(
@@ -143,6 +165,11 @@ export class LiveDataService {
       // If Nifty fails, relative strength will be 0
     }
     const niftyCloses = niftyHistory.map((c) => c.close);
+    const niftyHighs = niftyHistory.map((c) => c.high);
+    const niftyLows = niftyHistory.map((c) => c.low);
+
+    // 4b. Compute Nifty 50 regime indicators
+    const marketRegime = this.computeNiftyRegime(niftyCloses, niftyHighs, niftyLows, indiaVIX);
 
     // 5. For each symbol, fetch historical + compute indicators (in concurrent batches)
     const results: Array<{ stock: StockData; indicators: TechnicalIndicators }> = [];
@@ -167,7 +194,52 @@ export class LiveDataService {
       }
     }
 
-    return results;
+    return { stocks: results, marketRegime };
+  }
+
+  /**
+   * Legacy method for backward compatibility. Delegates to the new method.
+   */
+  async fetchAndComputeIndicators(
+    symbols: string[],
+    exchange: string = "NSE"
+  ): Promise<Array<{ stock: StockData; indicators: TechnicalIndicators }>> {
+    const { stocks } = await this.fetchAndComputeIndicatorsWithRegime(symbols, exchange);
+    return stocks;
+  }
+
+  /**
+   * Compute Nifty 50 market regime from its OHLCV data.
+   */
+  private computeNiftyRegime(
+    closes: number[],
+    highs: number[],
+    lows: number[],
+    indiaVIX: number | null
+  ): MarketRegimeInfo {
+    if (closes.length < 52) {
+      // Insufficient data — default to SIDEWAYS (cautious)
+      return {
+        regime: "SIDEWAYS",
+        niftyClose: closes.length > 0 ? closes[closes.length - 1] : 0,
+        niftyEMA20: 0,
+        niftyEMA50: 0,
+        niftyADX: 0,
+        indiaVIX,
+        description: "Insufficient Nifty data for regime detection — applying cautious thresholds.",
+      };
+    }
+
+    const niftyClose = closes[closes.length - 1];
+    const ema20Arr = calculateEMA(closes, 20);
+    const ema50Arr = calculateEMA(closes, 50);
+    const adxArr = calculateADX(highs, lows, closes, 14);
+
+    const niftyEMA20 = ema20Arr.length > 0 ? ema20Arr[ema20Arr.length - 1] : niftyClose;
+    const niftyEMA50 = ema50Arr.length > 0 ? ema50Arr[ema50Arr.length - 1] : niftyClose;
+    const niftyADX = adxArr.length > 0 ? adxArr[adxArr.length - 1] : 15;
+
+    return detectMarketRegime(niftyClose, niftyEMA20, niftyEMA50, niftyADX, indiaVIX);
   }
 
   private async processSymbol(
@@ -283,6 +355,17 @@ export class LiveDataService {
     const volSlice = volume.slice(-20);
     const volumeSMA20 = volSlice.reduce((a, b) => a + b, 0) / volSlice.length;
 
+    // Volume recent 3 bars (for 3-bar acceleration check)
+    const vLen = volume.length;
+    const volumeRecent3: [number, number, number] = [
+      vLen >= 3 ? volume[vLen - 3] : 0,
+      vLen >= 2 ? volume[vLen - 2] : 0,
+      vLen >= 1 ? volume[vLen - 1] : 0,
+    ];
+
+    // Volume Rate of Change (VROC)
+    const vroc20 = calculateVROC(volume, 20);
+
     // Week change
     const weekClose = close.length >= 5 ? close[close.length - 6] : close[0];
     const weekChange = ((lastClose - weekClose) / weekClose) * 100;
@@ -298,6 +381,8 @@ export class LiveDataService {
       atr14: last(atr),
       relativeStrength3M,
       volumeSMA20,
+      volumeRecent3,
+      vroc20,
       weekChange,
       macdLine: macd.macdLine.length > 0 ? last(macd.macdLine) : 0,
       macdSignal: macd.signalLine.length > 0 ? last(macd.signalLine) : 0,

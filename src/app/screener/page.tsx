@@ -30,10 +30,13 @@ import {
   Link2,
   Link2Off,
   ShoppingCart,
+  AlertTriangle,
 } from "lucide-react";
 import {
   type ScreenerConfig,
   type ScreenerResult,
+  type MarketRegimeInfo,
+  type AdaptiveThresholds,
   DEFAULT_SCREENER_CONFIG,
 } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/utils";
@@ -55,6 +58,8 @@ export default function ScreenerPage() {
     loading,
     lastRefresh,
     kiteStatus,
+    marketRegime,
+    adaptiveThresholds,
     refresh,
     connectKite,
     disconnectKite,
@@ -165,6 +170,9 @@ export default function ScreenerPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Market Regime Banner */}
+        <MarketRegimeBanner regime={marketRegime} thresholds={adaptiveThresholds} />
 
         {/* Configuration Panel */}
         {showConfig && (
@@ -665,7 +673,7 @@ function StockRow({
                       passed={result.phase3Pass}
                       details={[
                         `Pullback to EMA: ${result.phase3Details.pullbackToEMA ? "Yes" : "No"} (${result.phase3Details.emaProximity.toFixed(1)}% from EMA)`,
-                        `RSI Zone (40-75): ${result.phase3Details.rsiInZone ? "Yes" : "No"} (RSI: ${result.phase3Details.rsiValue.toFixed(1)})`,
+                        `RSI: ${result.phase3Details.rsiValue.toFixed(1)} — ${result.phase3Details.rsiTier} zone (${result.phase3Details.rsiTierScore > 0 ? "+" : ""}${result.phase3Details.rsiTierScore} pts)`,
                         `ROC Positive: ${result.phase3Details.rocPositive ? "Yes" : "No"}`,
                         `+DI > -DI: ${result.phase3Details.plusDIAboveMinusDI ? "Yes" : "No"}`,
                         `Stochastic Bullish: ${result.phase3Details.stochasticBullish ? "Yes" : "No"}`,
@@ -678,6 +686,7 @@ function StockRow({
                       details={[
                         `OBV Trending Up: ${result.phase4VolumeDetails.obvTrendingUp ? "Yes" : "No"}`,
                         `Volume Above Avg: ${result.phase4VolumeDetails.volumeAboveAvg ? "Yes" : "No"}`,
+                        `Volume Trend: ${result.phase4VolumeDetails.volumeTrend} (${result.phase4VolumeDetails.volumeTrendScore > 0 ? "+" : ""}${result.phase4VolumeDetails.volumeTrendScore} pts)`,
                         `MFI Healthy: ${result.phase4VolumeDetails.mfiHealthy ? "Yes" : "No"}`,
                       ]}
                     />
@@ -764,13 +773,13 @@ function StockRow({
                 {/* Momentum Indicators */}
                 <IndicatorCard
                   label="RSI(14)"
-                  value={result.indicators.rsi14.toFixed(1)}
+                  value={`${result.indicators.rsi14.toFixed(1)} (${result.phase3Details.rsiTier})`}
                   status={
-                    result.indicators.rsi14 >= 40 && result.indicators.rsi14 <= 75
+                    result.indicators.rsi14 >= 45 && result.indicators.rsi14 <= 65
                       ? "good"
-                      : result.indicators.rsi14 > 75
-                        ? "bad"
-                        : "neutral"
+                      : result.indicators.rsi14 > 65 && result.indicators.rsi14 <= 75
+                        ? "neutral"
+                        : "bad"
                   }
                 />
                 <IndicatorCard
@@ -804,12 +813,14 @@ function StockRow({
                   }
                 />
                 <IndicatorCard
-                  label="Volume"
+                  label={`Volume (${result.phase4VolumeDetails.volumeTrend})`}
                   value={`${(result.stock.volume / 1000000).toFixed(1)}M`}
                   status={
-                    result.stock.volume > result.indicators.volumeSMA20
+                    result.phase4VolumeDetails.volumeTrend === "accelerating"
                       ? "good"
-                      : "neutral"
+                      : result.phase4VolumeDetails.volumeTrend === "declining"
+                        ? "bad"
+                        : "neutral"
                   }
                 />
                 {/* Volatility Indicators */}
@@ -966,5 +977,96 @@ function IndicatorCard({
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <p className="font-mono font-semibold">{value}</p>
     </div>
+  );
+}
+
+function MarketRegimeBanner({
+  regime,
+  thresholds,
+}: {
+  regime: MarketRegimeInfo;
+  thresholds: AdaptiveThresholds;
+}) {
+  const regimeConfig: Record<
+    string,
+    { color: string; bg: string; border: string; icon: string; label: string }
+  > = {
+    BULL: {
+      color: "text-accent",
+      bg: "bg-accent/10",
+      border: "border-accent/30",
+      icon: "text-accent",
+      label: "BULL MARKET",
+    },
+    BEAR: {
+      color: "text-destructive",
+      bg: "bg-destructive/10",
+      border: "border-destructive/30",
+      icon: "text-destructive",
+      label: "BEAR MARKET",
+    },
+    SIDEWAYS: {
+      color: "text-[#f59e0b]",
+      bg: "bg-[#f59e0b]/10",
+      border: "border-[#f59e0b]/30",
+      icon: "text-[#f59e0b]",
+      label: "SIDEWAYS",
+    },
+  };
+
+  const cfg = regimeConfig[regime.regime] || regimeConfig.SIDEWAYS;
+  const isNotBull = regime.regime !== "BULL";
+
+  return (
+    <Card className={`mb-6 ${cfg.bg} backdrop-blur ${cfg.border}`}>
+      <CardContent className="p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${cfg.bg}`}>
+              <Activity className={`w-5 h-5 ${cfg.icon}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-bold ${cfg.color}`}>
+                  Market Regime: {cfg.label}
+                </span>
+                {regime.indiaVIX !== null && (
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    VIX: {regime.indiaVIX.toFixed(1)}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                {regime.description}
+              </p>
+            </div>
+          </div>
+
+          {/* Adaptive Thresholds Summary */}
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-4 font-mono text-muted-foreground">
+              <div>
+                <span className="text-muted-foreground">Nifty: </span>
+                <span className="text-foreground font-semibold">
+                  {regime.niftyClose.toFixed(0)}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">ADX: </span>
+                <span className="text-foreground">{regime.niftyADX.toFixed(1)}</span>
+              </div>
+            </div>
+            {isNotBull && (
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className={`w-3.5 h-3.5 ${cfg.icon}`} />
+                <span className={`font-medium ${cfg.color}`}>
+                  Adapted: ADX&ge;{thresholds.minADX}, RSI {thresholds.rsiLow}-{thresholds.rsiHigh}, R:R {thresholds.minRiskReward}:1, SB&ge;{thresholds.strongBuyThreshold}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
