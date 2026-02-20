@@ -4,6 +4,7 @@ import {
   runScreener,
   detectMarketRegime,
   getAdaptiveThresholds,
+  computeSectorRankings,
 } from "@/lib/screener-engine";
 import { KiteAPI } from "@/lib/kite-api";
 import { LiveDataService, NIFTY_500_SYMBOLS } from "@/lib/live-data-service";
@@ -70,7 +71,8 @@ export async function GET() {
   }
 
   const adaptiveThresholds = getAdaptiveThresholds(marketRegime.regime);
-  const results = runScreener(stocks, DEFAULT_SCREENER_CONFIG, adaptiveThresholds);
+  const sectorRankings = computeSectorRankings(stocks);
+  const results = runScreener(stocks, DEFAULT_SCREENER_CONFIG, adaptiveThresholds, sectorRankings);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
@@ -78,6 +80,7 @@ export async function GET() {
     totalScanned: stocks.length,
     marketRegime,
     adaptiveThresholds,
+    sectorRankings,
     pipeline: {
       phase1: results.filter((r) => r.phase1Pass).length,
       phase2: results.filter((r) => r.phase2Pass).length,
@@ -174,7 +177,8 @@ export async function POST(request: Request) {
   }
 
   const adaptiveThresholds = getAdaptiveThresholds(marketRegime.regime, config);
-  const results = runScreener(stocks, config, adaptiveThresholds);
+  const sectorRankings = computeSectorRankings(stocks);
+  const results = runScreener(stocks, config, adaptiveThresholds, sectorRankings);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
@@ -183,6 +187,7 @@ export async function POST(request: Request) {
     totalScanned: stocks.length,
     marketRegime,
     adaptiveThresholds,
+    sectorRankings,
     pipeline: {
       phase1: results.filter((r) => r.phase1Pass).length,
       phase2: results.filter((r) => r.phase2Pass).length,

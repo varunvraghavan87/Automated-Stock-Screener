@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -29,9 +29,10 @@ import {
 } from "lucide-react";
 import { usePaperTrade } from "@/contexts/PaperTradeContext";
 import { usePriceUpdate } from "@/contexts/PriceUpdateContext";
+import { useScreenerData } from "@/hooks/useScreenerData";
 import { CloseTradeDialog } from "@/components/trade-actions/CloseTradeDialog";
 import { formatCurrency, formatPercent } from "@/lib/utils";
-import type { PaperTrade } from "@/lib/types";
+import type { PaperTrade, DivergenceResult } from "@/lib/types";
 
 export default function PaperTradePage() {
   const {
@@ -47,6 +48,18 @@ export default function PaperTradePage() {
   } = usePaperTrade();
 
   const { lastUpdate, updating, marketOpen, triggerUpdate } = usePriceUpdate();
+  const { results: screenerResults } = useScreenerData();
+
+  // Build a map of symbols with bearish divergences (for warning badges on open trades)
+  const bearishDivergenceMap = useMemo(() => {
+    const map = new Map<string, DivergenceResult>();
+    for (const r of screenerResults) {
+      if (r.indicators.divergences.hasBearish) {
+        map.set(r.stock.symbol, r.indicators.divergences);
+      }
+    }
+    return map;
+  }, [screenerResults]);
 
   const [closingTrade, setClosingTrade] = useState<PaperTrade | null>(null);
 
@@ -232,6 +245,11 @@ export default function PaperTradePage() {
                             <p className="text-xs text-muted-foreground truncate">
                               {trade.name}
                             </p>
+                            {bearishDivergenceMap.has(trade.symbol) && (
+                              <Badge variant="destructive" className="text-[10px] mt-0.5">
+                                Bearish Divergence
+                              </Badge>
+                            )}
                           </div>
                           <div className="col-span-3 md:col-span-1 text-right font-mono">
                             {trade.quantity}

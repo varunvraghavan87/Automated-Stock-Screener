@@ -1,5 +1,8 @@
 // Technical indicator calculations for the Nifty Velocity Alpha framework
 
+import type { SwingPoint, Divergence, DivergenceResult, DivergenceType } from "./types";
+import { EMPTY_DIVERGENCE_RESULT } from "./types";
+
 export function calculateEMA(
   prices: number[],
   period: number
@@ -819,4 +822,311 @@ export function calculateADLine(
     result.push(adl);
   }
   return result;
+}
+
+// ============================================================
+// Divergence Detection — Swing Point Detection & Multi-Indicator Divergence
+// ============================================================
+
+const SWING_ORDER = 5;          // Bars on each side to confirm a swing point
+const MIN_SWING_SEPARATION = 5; // Minimum bars between consecutive same-type swings
+const LOOKBACK_BARS = 50;       // How far back to scan for swing points
+
+/**
+ * Detect swing highs and lows using a fractal-based approach.
+ * A swing high occurs when a bar's value is higher than `order` bars on each side.
+ * Similarly for swing lows.
+ */
+export function detectSwingPoints(
+  data: number[],
+  order: number = SWING_ORDER,
+  lookback: number = LOOKBACK_BARS
+): SwingPoint[] {
+  const points: SwingPoint[] = [];
+  const startIdx = Math.max(0, data.length - lookback);
+
+  for (let i = startIdx + order; i < data.length - order; i++) {
+    // Check for swing high
+    let isHigh = true;
+    for (let j = 1; j <= order; j++) {
+      if (data[i] <= data[i - j] || data[i] <= data[i + j]) {
+        isHigh = false;
+        break;
+      }
+    }
+    if (isHigh) {
+      points.push({ index: i, value: data[i], type: 'high' });
+    }
+
+    // Check for swing low
+    let isLow = true;
+    for (let j = 1; j <= order; j++) {
+      if (data[i] >= data[i - j] || data[i] >= data[i + j]) {
+        isLow = false;
+        break;
+      }
+    }
+    if (isLow) {
+      points.push({ index: i, value: data[i], type: 'low' });
+    }
+  }
+
+  return filterSwingsBySeparation(points, MIN_SWING_SEPARATION);
+}
+
+/**
+ * Filter swing points to enforce minimum separation between same-type swings.
+ * When two same-type swings are too close, keep the most extreme value.
+ */
+function filterSwingsBySeparation(
+  points: SwingPoint[],
+  minSep: number
+): SwingPoint[] {
+  const sorted = [...points].sort((a, b) => a.index - b.index);
+  const result: SwingPoint[] = [];
+
+  for (const point of sorted) {
+    // Find the last point of the same type in result
+    let lastSameTypeIdx = -1;
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (result[i].type === point.type) {
+        lastSameTypeIdx = i;
+        break;
+      }
+    }
+
+    if (lastSameTypeIdx === -1 || point.index - result[lastSameTypeIdx].index >= minSep) {
+      result.push(point);
+    } else {
+      // Too close — replace if this one is more extreme
+      const existing = result[lastSameTypeIdx];
+      if (point.type === 'high' && point.value > existing.value) {
+        result[lastSameTypeIdx] = point;
+      } else if (point.type === 'low' && point.value < existing.value) {
+        result[lastSameTypeIdx] = point;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Compute divergence strength as a normalized 0-1 value.
+ */
+function computeDivergenceStrength(
+  priceDelta: number,
+  indicatorDelta: number,
+  priceRange: number,
+  indicatorRange: number
+): number {
+  if (priceRange === 0 || indicatorRange === 0) return 0;
+  const priceStrength = Math.abs(priceDelta) / priceRange;
+  const indicatorStrength = Math.abs(indicatorDelta) / indicatorRange;
+  return Math.min((priceStrength + indicatorStrength) / 2, 1);
+}
+
+/**
+ * Safely look up an indicator value at a price bar index, accounting for array offset.
+ */
+function indicatorValueAt(
+  indicatorArray: number[],
+  priceIndex: number,
+  offset: number
+): number | null {
+  const idx = priceIndex - offset;
+  if (idx < 0 || idx >= indicatorArray.length) return null;
+  return indicatorArray[idx];
+}
+
+/**
+ * Detect divergences between price and multiple indicators.
+ * Scans the last LOOKBACK_BARS of data for swing point divergences.
+ *
+ * Divergence types detected:
+ * - Bullish RSI:  price lower low, RSI higher low  → +8 pts
+ * - Bearish RSI:  price higher high, RSI lower high → -10 pts
+ * - Bullish MACD: price lower low, histogram higher low → +8 pts
+ * - Bearish MACD: price higher high, histogram lower high → -10 pts
+ * - OBV warning:  price higher high, OBV slope ≤ 0 → -5 pts
+ * - MFI warning:  price higher high, MFI declining  → -5 pts
+ */
+export function detectDivergences(
+  closePrices: number[],
+  rsiArray: number[],
+  macdHistogram: number[],
+  obvArray: number[],
+  mfiArray: number[]
+): DivergenceResult {
+  if (closePrices.length < LOOKBACK_BARS) {
+    return EMPTY_DIVERGENCE_RESULT;
+  }
+
+  const divergences: Divergence[] = [];
+  const dataLen = closePrices.length;
+
+  // Detect swing points in price
+  const priceSwings = detectSwingPoints(closePrices);
+  const priceLows = priceSwings.filter(s => s.type === 'low');
+  const priceHighs = priceSwings.filter(s => s.type === 'high');
+
+  // Compute offsets for each indicator array
+  const rsiOffset = closePrices.length - rsiArray.length;
+  const macdOffset = closePrices.length - macdHistogram.length;
+  const obvOffset = closePrices.length - obvArray.length;
+  const mfiOffset = closePrices.length - mfiArray.length;
+
+  // Price range for strength normalization
+  const lookbackStart = Math.max(0, dataLen - LOOKBACK_BARS);
+  const priceSlice = closePrices.slice(lookbackStart);
+  const priceRange = Math.max(...priceSlice) - Math.min(...priceSlice) || 1;
+
+  // ---- 1. RSI Divergences ----
+  if (priceLows.length >= 2) {
+    const L1 = priceLows[priceLows.length - 2];
+    const L2 = priceLows[priceLows.length - 1];
+    if (L2.value < L1.value) {
+      const rsiAtL1 = indicatorValueAt(rsiArray, L1.index, rsiOffset);
+      const rsiAtL2 = indicatorValueAt(rsiArray, L2.index, rsiOffset);
+      if (rsiAtL1 !== null && rsiAtL2 !== null && rsiAtL2 > rsiAtL1) {
+        const strength = computeDivergenceStrength(
+          L2.value - L1.value, rsiAtL2 - rsiAtL1, priceRange, 100
+        );
+        divergences.push({
+          type: 'bullish_rsi', direction: 'bullish',
+          priceSwing1: L1, priceSwing2: L2,
+          indicatorSwing1: { index: L1.index, value: rsiAtL1, type: 'low' },
+          indicatorSwing2: { index: L2.index, value: rsiAtL2, type: 'low' },
+          strength, barsAgo: dataLen - 1 - L2.index, scoreImpact: 8,
+          description: `Bullish RSI divergence: price lower low but RSI higher low (${rsiAtL1.toFixed(1)} → ${rsiAtL2.toFixed(1)}, strength ${(strength * 100).toFixed(0)}%)`,
+        });
+      }
+    }
+  }
+
+  if (priceHighs.length >= 2) {
+    const H1 = priceHighs[priceHighs.length - 2];
+    const H2 = priceHighs[priceHighs.length - 1];
+    if (H2.value > H1.value) {
+      const rsiAtH1 = indicatorValueAt(rsiArray, H1.index, rsiOffset);
+      const rsiAtH2 = indicatorValueAt(rsiArray, H2.index, rsiOffset);
+      if (rsiAtH1 !== null && rsiAtH2 !== null && rsiAtH2 < rsiAtH1) {
+        const strength = computeDivergenceStrength(
+          H2.value - H1.value, rsiAtH2 - rsiAtH1, priceRange, 100
+        );
+        divergences.push({
+          type: 'bearish_rsi', direction: 'bearish',
+          priceSwing1: H1, priceSwing2: H2,
+          indicatorSwing1: { index: H1.index, value: rsiAtH1, type: 'high' },
+          indicatorSwing2: { index: H2.index, value: rsiAtH2, type: 'high' },
+          strength, barsAgo: dataLen - 1 - H2.index, scoreImpact: -10,
+          description: `Bearish RSI divergence: price higher high but RSI lower high (${rsiAtH1.toFixed(1)} → ${rsiAtH2.toFixed(1)}, strength ${(strength * 100).toFixed(0)}%)`,
+        });
+      }
+    }
+  }
+
+  // ---- 2. MACD Histogram Divergences ----
+  if (macdHistogram.length >= LOOKBACK_BARS && priceLows.length >= 2) {
+    const L1 = priceLows[priceLows.length - 2];
+    const L2 = priceLows[priceLows.length - 1];
+    if (L2.value < L1.value) {
+      const histAtL1 = indicatorValueAt(macdHistogram, L1.index, macdOffset);
+      const histAtL2 = indicatorValueAt(macdHistogram, L2.index, macdOffset);
+      if (histAtL1 !== null && histAtL2 !== null && histAtL2 > histAtL1) {
+        const histSlice = macdHistogram.slice(-LOOKBACK_BARS);
+        const histRange = Math.max(Math.abs(Math.max(...histSlice)), Math.abs(Math.min(...histSlice)), 0.01) * 2;
+        const strength = computeDivergenceStrength(L2.value - L1.value, histAtL2 - histAtL1, priceRange, histRange);
+        divergences.push({
+          type: 'bullish_macd', direction: 'bullish',
+          priceSwing1: L1, priceSwing2: L2,
+          indicatorSwing1: { index: L1.index, value: histAtL1, type: 'low' },
+          indicatorSwing2: { index: L2.index, value: histAtL2, type: 'low' },
+          strength, barsAgo: dataLen - 1 - L2.index, scoreImpact: 8,
+          description: `Bullish MACD divergence: price lower low but histogram higher low (strength ${(strength * 100).toFixed(0)}%)`,
+        });
+      }
+    }
+  }
+
+  if (macdHistogram.length >= LOOKBACK_BARS && priceHighs.length >= 2) {
+    const H1 = priceHighs[priceHighs.length - 2];
+    const H2 = priceHighs[priceHighs.length - 1];
+    if (H2.value > H1.value) {
+      const histAtH1 = indicatorValueAt(macdHistogram, H1.index, macdOffset);
+      const histAtH2 = indicatorValueAt(macdHistogram, H2.index, macdOffset);
+      if (histAtH1 !== null && histAtH2 !== null && histAtH2 < histAtH1) {
+        const histSlice = macdHistogram.slice(-LOOKBACK_BARS);
+        const histRange = Math.max(Math.abs(Math.max(...histSlice)), Math.abs(Math.min(...histSlice)), 0.01) * 2;
+        const strength = computeDivergenceStrength(H2.value - H1.value, histAtH2 - histAtH1, priceRange, histRange);
+        divergences.push({
+          type: 'bearish_macd', direction: 'bearish',
+          priceSwing1: H1, priceSwing2: H2,
+          indicatorSwing1: { index: H1.index, value: histAtH1, type: 'high' },
+          indicatorSwing2: { index: H2.index, value: histAtH2, type: 'high' },
+          strength, barsAgo: dataLen - 1 - H2.index, scoreImpact: -10,
+          description: `Bearish MACD divergence: price higher high but histogram lower high (strength ${(strength * 100).toFixed(0)}%)`,
+        });
+      }
+    }
+  }
+
+  // ---- 3. OBV Divergence (warning) ----
+  if (priceHighs.length >= 2) {
+    const H1 = priceHighs[priceHighs.length - 2];
+    const H2 = priceHighs[priceHighs.length - 1];
+    if (H2.value > H1.value) {
+      const obvAtH1 = indicatorValueAt(obvArray, H1.index, obvOffset);
+      const obvAtH2 = indicatorValueAt(obvArray, H2.index, obvOffset);
+      if (obvAtH1 !== null && obvAtH2 !== null && obvAtH2 <= obvAtH1) {
+        divergences.push({
+          type: 'obv_divergence', direction: 'bearish',
+          priceSwing1: H1, priceSwing2: H2,
+          indicatorSwing1: { index: H1.index, value: obvAtH1, type: 'high' },
+          indicatorSwing2: { index: H2.index, value: obvAtH2, type: 'high' },
+          strength: 0.5, barsAgo: dataLen - 1 - H2.index, scoreImpact: -5,
+          description: 'OBV divergence: price rising but volume not confirming',
+        });
+      }
+    }
+  }
+
+  // ---- 4. MFI Divergence (warning) ----
+  if (priceHighs.length >= 2) {
+    const H1 = priceHighs[priceHighs.length - 2];
+    const H2 = priceHighs[priceHighs.length - 1];
+    if (H2.value > H1.value) {
+      const mfiAtH1 = indicatorValueAt(mfiArray, H1.index, mfiOffset);
+      const mfiAtH2 = indicatorValueAt(mfiArray, H2.index, mfiOffset);
+      if (mfiAtH1 !== null && mfiAtH2 !== null && mfiAtH2 < mfiAtH1) {
+        divergences.push({
+          type: 'mfi_divergence', direction: 'bearish',
+          priceSwing1: H1, priceSwing2: H2,
+          indicatorSwing1: { index: H1.index, value: mfiAtH1, type: 'high' },
+          indicatorSwing2: { index: H2.index, value: mfiAtH2, type: 'high' },
+          strength: 0.45, barsAgo: dataLen - 1 - H2.index, scoreImpact: -5,
+          description: `MFI divergence: price rising but money flow declining (${mfiAtH1.toFixed(0)} → ${mfiAtH2.toFixed(0)})`,
+        });
+      }
+    }
+  }
+
+  // ---- Build result ----
+  const hasBullish = divergences.some(d => d.direction === 'bullish');
+  const hasBearish = divergences.some(d => d.direction === 'bearish');
+  const rawNetScore = divergences.reduce((sum, d) => sum + d.scoreImpact, 0);
+  const netScoreImpact = Math.max(-15, Math.min(8, rawNetScore));
+
+  const summaryParts: string[] = [];
+  if (hasBullish) {
+    const n = divergences.filter(d => d.direction === 'bullish').length;
+    summaryParts.push(`${n} bullish divergence${n > 1 ? 's' : ''} detected`);
+  }
+  if (hasBearish) {
+    const n = divergences.filter(d => d.direction === 'bearish').length;
+    summaryParts.push(`${n} bearish divergence${n > 1 ? 's' : ''} detected`);
+  }
+  const summary = summaryParts.length > 0 ? summaryParts.join('; ') : 'No divergences detected';
+
+  return { divergences, hasBullish, hasBearish, netScoreImpact, summary };
 }

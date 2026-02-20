@@ -50,7 +50,7 @@ import { useScreenerData } from "@/hooks/useScreenerData";
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8", "#ef4444"];
 
 export default function SignalsPage() {
-  const { results, mode, loading, lastRefresh, marketRegime, refresh } = useScreenerData();
+  const { results, mode, loading, lastRefresh, marketRegime, sectorRankings, refresh } = useScreenerData();
 
   const signalDistribution = useMemo(() => {
     const dist: Record<string, number> = {
@@ -136,6 +136,12 @@ export default function SignalsPage() {
         value:
           pick.phase2WeeklyTrend.status === "aligned" ? 95 :
           pick.phase2WeeklyTrend.status === "mixed" ? 50 : 10,
+      },
+      {
+        metric: "Divergence",
+        value:
+          pick.indicators.divergences.hasBullish ? 95 :
+          pick.indicators.divergences.hasBearish ? 10 : 50,
       },
     ];
   }, [topPicks]);
@@ -360,6 +366,66 @@ export default function SignalsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Sector Rotation Rankings Table */}
+            {sectorRankings.rankings.length > 0 && (
+              <Card className="bg-card/50 backdrop-blur border-border mt-6">
+                <CardHeader>
+                  <CardTitle className="text-lg">Sector Rotation Rankings</CardTitle>
+                  <CardDescription>
+                    Sectors ranked by composite momentum (RS, breadth, short-term change)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Rank</th>
+                          <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Sector</th>
+                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Stocks</th>
+                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Avg 3M RS</th>
+                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Breadth</th>
+                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Composite</th>
+                          <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Impact</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectorRankings.rankings.map((s) => (
+                          <tr key={s.sector} className="border-b border-border/50 hover:bg-secondary/30">
+                            <td className="py-2 px-2 font-mono font-bold text-sm">#{s.rank}</td>
+                            <td className="py-2 px-2 text-sm">{s.sector}</td>
+                            <td className="text-right py-2 px-2 font-mono text-sm">{s.stockCount}</td>
+                            <td className="text-right py-2 px-2 font-mono text-sm">
+                              <span className={s.avgRelativeStrength3M >= 0 ? "text-green-500" : "text-red-500"}>
+                                {s.avgRelativeStrength3M > 0 ? "+" : ""}{s.avgRelativeStrength3M.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="text-right py-2 px-2 font-mono text-sm">{s.breadth.toFixed(0)}%</td>
+                            <td className="text-right py-2 px-2 font-mono text-sm">{s.compositeScore.toFixed(1)}</td>
+                            <td className="text-center py-2 px-2">
+                              <Badge
+                                variant={
+                                  sectorRankings.topSectors.includes(s.sector)
+                                    ? "success"
+                                    : sectorRankings.bottomSectors.includes(s.sector)
+                                      ? "destructive"
+                                      : "outline"
+                                }
+                                className="text-[10px]"
+                              >
+                                {sectorRankings.topSectors.includes(s.sector) ? "+5" :
+                                 sectorRankings.bottomSectors.includes(s.sector) ? "-5" : "0"}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="analysis">

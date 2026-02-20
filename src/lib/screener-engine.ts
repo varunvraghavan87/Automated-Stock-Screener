@@ -11,7 +11,12 @@ import {
   type MarketRegimeInfo,
   type AdaptiveThresholds,
   type WeeklyTrendHealth,
+  type SectorMetrics,
+  type SectorRankings,
+  type SectorContext,
   DEFAULT_SCREENER_CONFIG,
+  DEFAULT_SECTOR_CONTEXT,
+  EMPTY_SECTOR_RANKINGS,
 } from "./types";
 
 // ---- Market Regime Detection ----
@@ -236,6 +241,8 @@ export function phase3Analyze(
     plusDIAboveMinusDI,
     stochasticBullish,
     macdBullish,
+    divergenceResult: indicators.divergences,
+    divergenceScoreImpact: indicators.divergences.netScoreImpact,
   };
 }
 
@@ -376,7 +383,8 @@ function calculateScore(
   phase3: Phase3Details,
   phase4Vol: Phase4VolumeDetails,
   phase5Vola: Phase5VolatilityDetails,
-  indicators: TechnicalIndicators
+  indicators: TechnicalIndicators,
+  sectorCtx?: SectorContext
 ): number {
   let score = 0;
 
@@ -403,6 +411,9 @@ function calculateScore(
   if (phase3.macdBullish) score += 2;
   if (phase3.candlestickPattern) score += 2;
 
+  // Divergence scoring (Phase 3 extension): clamped -15 to +8 pts
+  score += phase3.divergenceScoreImpact;
+
   // Phase 4: Volume (20 pts max — expanded with trend analysis)
   if (phase4Vol.obvTrendingUp) score += 5;
   if (phase4Vol.mfiHealthy) score += 5;
@@ -419,6 +430,9 @@ function calculateScore(
   // Bonus: Strong trend (5 pts)
   if (indicators.adx14 > 35) score += 3;
   if (indicators.relativeStrength3M > 5) score += 2;
+
+  // Sector Rotation: +5 top sector, -5 bottom sector
+  if (sectorCtx) score += sectorCtx.sectorScoreImpact;
 
   return Math.max(0, Math.min(score, 100));
 }
@@ -448,9 +462,19 @@ function generateRationale(
   phase3: Phase3Details,
   phase4Vol: Phase4VolumeDetails,
   phase5Vola: Phase5VolatilityDetails,
-  riskParams: Phase4RiskParams
+  riskParams: Phase4RiskParams,
+  sectorCtx?: SectorContext
 ): string {
   const parts: string[] = [];
+
+  // Sector rotation context (high prominence — first in rationale)
+  if (sectorCtx && sectorCtx.sectorScoreImpact !== 0) {
+    if (sectorCtx.isTopSector) {
+      parts.push(`🏆 Sector Leader: ${sectorCtx.sectorName} ranked #${sectorCtx.sectorRank}/${sectorCtx.totalSectors} (breadth ${sectorCtx.sectorBreadth.toFixed(0)}%, avg RS ${sectorCtx.sectorAvgRS3M.toFixed(1)}%) — +5 pts`);
+    } else if (sectorCtx.isBottomSector) {
+      parts.push(`⚠️ Sector Laggard: ${sectorCtx.sectorName} ranked #${sectorCtx.sectorRank}/${sectorCtx.totalSectors} (breadth ${sectorCtx.sectorBreadth.toFixed(0)}%, avg RS ${sectorCtx.sectorAvgRS3M.toFixed(1)}%) — -5 pts`);
+    }
+  }
 
   // Trend signals
   if (indicators.macdLine > indicators.macdSignal && indicators.macdLine > 0) {
@@ -514,6 +538,13 @@ function generateRationale(
     parts.push(`${phase3.candlestickPattern} pattern detected`);
   }
 
+  // Divergence signals
+  if (phase3.divergenceResult.divergences.length > 0) {
+    for (const div of phase3.divergenceResult.divergences) {
+      parts.push(div.description);
+    }
+  }
+
   parts.push(
     `Entry ₹${riskParams.entryPrice.toFixed(2)}, SL ₹${riskParams.stopLoss.toFixed(2)}, Target ₹${riskParams.target.toFixed(2)} (${riskParams.riskRewardRatio}:1 R:R)`
   );
@@ -521,12 +552,124 @@ function generateRationale(
   return parts.join(". ") + ".";
 }
 
+// ---- Sector Rotation Ranking ----
+
+/**
+ * Compute sector-level momentum rankings across all stocks.
+ * Uses relativeStrength3M, weekChange, and price vs EMA50 breadth.
+ * Composite = 50% normalized RS3M + 30% breadth + 20% normalized weekChange.
+ */
+export function computeSectorRankings(
+  stocks: Array<{ stock: StockData; indicators: TechnicalIndicators }>
+): SectorRankings {
+  // Pass 1: Accumulate per-sector metrics
+  const sectorMap = new Map<string, {
+    rsSum: number; weekChangeSum: number;
+    aboveEMA50: number; total: number;
+  }>();
+
+  for (const { stock, indicators } of stocks) {
+    if (stock.sector === "Unknown") continue;
+    const entry = sectorMap.get(stock.sector) ?? {
+      rsSum: 0, weekChangeSum: 0, aboveEMA50: 0, total: 0,
+    };
+    entry.rsSum += indicators.relativeStrength3M;
+    entry.weekChangeSum += indicators.weekChange;
+    if (stock.lastPrice > indicators.ema50) entry.aboveEMA50++;
+    entry.total++;
+    sectorMap.set(stock.sector, entry);
+  }
+
+  if (sectorMap.size === 0) return EMPTY_SECTOR_RANKINGS;
+
+  // Pass 2: Compute averages
+  const rawMetrics: Array<Omit<SectorMetrics, 'rank'>> = [];
+  for (const [sector, data] of sectorMap) {
+    rawMetrics.push({
+      sector,
+      stockCount: data.total,
+      avgRelativeStrength3M: data.rsSum / data.total,
+      avgWeekChange: data.weekChangeSum / data.total,
+      breadth: (data.aboveEMA50 / data.total) * 100,
+      compositeScore: 0, // computed below after normalization
+    });
+  }
+
+  // Pass 3: Normalize RS3M and weekChange to 0-100 (min-max)
+  const rsValues = rawMetrics.map(m => m.avgRelativeStrength3M);
+  const wcValues = rawMetrics.map(m => m.avgWeekChange);
+  const rsMin = Math.min(...rsValues);
+  const rsMax = Math.max(...rsValues);
+  const wcMin = Math.min(...wcValues);
+  const wcMax = Math.max(...wcValues);
+  const rsRange = rsMax - rsMin || 1; // avoid division by zero
+  const wcRange = wcMax - wcMin || 1;
+
+  for (const m of rawMetrics) {
+    const normalizedRS = ((m.avgRelativeStrength3M - rsMin) / rsRange) * 100;
+    const normalizedWC = ((m.avgWeekChange - wcMin) / wcRange) * 100;
+    m.compositeScore = 0.50 * normalizedRS + 0.30 * m.breadth + 0.20 * normalizedWC;
+  }
+
+  // Pass 4: Sort descending by composite score, assign ranks
+  rawMetrics.sort((a, b) => b.compositeScore - a.compositeScore);
+  const rankings: SectorMetrics[] = rawMetrics.map((m, i) => ({
+    ...m,
+    rank: i + 1,
+  }));
+
+  const N = rankings.length;
+  const topCount = N <= 6 ? Math.ceil(N / 3) : 3;
+  const bottomCount = N <= 6 ? Math.ceil(N / 3) : 3;
+
+  return {
+    rankings,
+    totalSectors: N,
+    topSectors: rankings.slice(0, topCount).map(r => r.sector),
+    bottomSectors: rankings.slice(N - bottomCount).map(r => r.sector),
+  };
+}
+
+/**
+ * Get sector context for a specific stock based on computed rankings.
+ */
+export function getSectorContext(
+  stock: StockData,
+  rankings: SectorRankings
+): SectorContext {
+  const found = rankings.rankings.find(r => r.sector === stock.sector);
+  if (!found) {
+    // Unknown sector or not ranked — neutral treatment
+    return {
+      ...DEFAULT_SECTOR_CONTEXT,
+      sectorName: stock.sector,
+      totalSectors: rankings.totalSectors,
+      sectorRank: Math.ceil(rankings.totalSectors / 2) || 0,
+    };
+  }
+
+  const isTop = rankings.topSectors.includes(found.sector);
+  const isBottom = rankings.bottomSectors.includes(found.sector);
+
+  return {
+    sectorName: found.sector,
+    sectorRank: found.rank,
+    totalSectors: rankings.totalSectors,
+    isTopSector: isTop,
+    isBottomSector: isBottom,
+    sectorScoreImpact: isTop ? 5 : isBottom ? -5 : 0,
+    sectorBreadth: found.breadth,
+    sectorAvgRS3M: found.avgRelativeStrength3M,
+  };
+}
+
 // Main screener function — 6-stage pipeline
 // Accepts optional adaptive thresholds for regime-aware signal determination
 export function runScreener(
   stocks: Array<{ stock: StockData; indicators: TechnicalIndicators }>,
   config: ScreenerConfig = DEFAULT_SCREENER_CONFIG,
-  adaptiveThresholds?: AdaptiveThresholds
+  adaptiveThresholds?: AdaptiveThresholds,
+  sectorRankings?: SectorRankings
 ): ScreenerResult[] {
   const results: ScreenerResult[] = [];
 
@@ -546,9 +689,14 @@ export function runScreener(
     const p5Vola = p4Vol ? phase5VolatilityPass(p5VolaDetails, effectiveConfig) : false;
     const p6 = phase6Calculate(stock.lastPrice, indicators.atr14, effectiveConfig);
 
-    const score = calculateScore(p1, p2, p3Details, p4VolDetails, p5VolaDetails, indicators);
+    // Sector context: look up this stock's sector rank
+    const sectorCtx = sectorRankings
+      ? getSectorContext(stock, sectorRankings)
+      : DEFAULT_SECTOR_CONTEXT;
+
+    const score = calculateScore(p1, p2, p3Details, p4VolDetails, p5VolaDetails, indicators, sectorCtx);
     const signal = determineSignal(score, p1, p2, p3, p4Vol, adaptiveThresholds);
-    const rationale = generateRationale(stock, indicators, p3Details, p4VolDetails, p5VolaDetails, p6);
+    const rationale = generateRationale(stock, indicators, p3Details, p4VolDetails, p5VolaDetails, p6, sectorCtx);
 
     results.push({
       stock,
@@ -566,6 +714,7 @@ export function runScreener(
       overallScore: score,
       signal,
       rationale,
+      sectorContext: sectorCtx,
     });
   }
 

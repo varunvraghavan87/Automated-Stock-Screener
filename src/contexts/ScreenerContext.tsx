@@ -14,13 +14,16 @@ import {
   runScreener,
   detectMarketRegime,
   getAdaptiveThresholds,
+  computeSectorRankings,
 } from "@/lib/screener-engine";
 import type {
   ScreenerResult,
   ScreenerConfig,
   MarketRegimeInfo,
   AdaptiveThresholds,
+  SectorRankings,
 } from "@/lib/types";
+import { EMPTY_SECTOR_RANKINGS } from "@/lib/types";
 
 interface KiteStatus {
   connected: boolean;
@@ -37,6 +40,7 @@ interface ScreenerContextValue {
   kiteStatus: KiteStatus;
   marketRegime: MarketRegimeInfo;
   adaptiveThresholds: AdaptiveThresholds;
+  sectorRankings: SectorRankings;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;
@@ -63,10 +67,12 @@ const DEFAULT_DEMO_REGIME: MarketRegimeInfo = detectMarketRegime(
 export function ScreenerProvider({ children }: { children: ReactNode }) {
   // Initialize with client-side screener results (demo data)
   const defaultThresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
+  const defaultSectorRankings = computeSectorRankings(MOCK_STOCKS);
   const [results, setResults] = useState<ScreenerResult[]>(() =>
-    runScreener(MOCK_STOCKS, undefined, defaultThresholds)
+    runScreener(MOCK_STOCKS, undefined, defaultThresholds, defaultSectorRankings)
   );
   const [mode, setMode] = useState<"live" | "demo">("demo");
+  const [sectorRankings, setSectorRankings] = useState<SectorRankings>(defaultSectorRankings);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [kiteStatus, setKiteStatus] = useState<KiteStatus>({
@@ -125,14 +131,19 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         if (data.mode === "live" && data.results?.length > 0) {
           // Use full ScreenerResult[] from API (screener ran server-side with live Kite data)
           setResults(data.results as ScreenerResult[]);
+          if (data.sectorRankings) {
+            setSectorRankings(data.sectorRankings as SectorRankings);
+          }
         } else {
           // Demo mode: run screener client-side with mock data + adaptive thresholds
           const regime = data.marketRegime || DEFAULT_DEMO_REGIME;
           const thresholds = getAdaptiveThresholds(regime.regime, config as ScreenerConfig);
-          const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds);
+          const demoSectorRankings = computeSectorRankings(MOCK_STOCKS);
+          const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds, demoSectorRankings);
           setResults(freshResults);
           setMarketRegime(regime);
           setAdaptiveThresholds(thresholds);
+          setSectorRankings(demoSectorRankings);
         }
 
         // Also refresh Kite status
@@ -141,12 +152,14 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         console.error("Failed to refresh from API, using client-side data:", error);
         // Fallback: re-run screener client-side with default regime
         const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime, config as ScreenerConfig);
-        const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds);
+        const fallbackSectorRankings = computeSectorRankings(MOCK_STOCKS);
+        const freshResults = runScreener(MOCK_STOCKS, config as ScreenerConfig, thresholds, fallbackSectorRankings);
         setResults(freshResults);
         setMode("demo");
         setLastRefresh(new Date());
         setMarketRegime(DEFAULT_DEMO_REGIME);
         setAdaptiveThresholds(thresholds);
+        setSectorRankings(fallbackSectorRankings);
       } finally {
         setLoading(false);
       }
@@ -180,11 +193,13 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
       setMode("demo");
       // Revert to demo data since Kite is disconnected
       const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
-      const demoResults = runScreener(MOCK_STOCKS, undefined, thresholds);
+      const demoSectorRankings = computeSectorRankings(MOCK_STOCKS);
+      const demoResults = runScreener(MOCK_STOCKS, undefined, thresholds, demoSectorRankings);
       setResults(demoResults);
       setLastRefresh(new Date());
       setMarketRegime(DEFAULT_DEMO_REGIME);
       setAdaptiveThresholds(thresholds);
+      setSectorRankings(demoSectorRankings);
     } catch {
       // Silently fail
     }
@@ -200,6 +215,7 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         kiteStatus,
         marketRegime,
         adaptiveThresholds,
+        sectorRankings,
         refresh,
         checkKiteStatus,
         connectKite,

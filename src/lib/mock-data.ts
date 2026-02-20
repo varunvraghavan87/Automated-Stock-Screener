@@ -1,4 +1,5 @@
-import type { StockData, TechnicalIndicators, WeeklyTrendHealth } from "./types";
+import type { StockData, TechnicalIndicators, WeeklyTrendHealth, DivergenceResult } from "./types";
+import { EMPTY_DIVERGENCE_RESULT } from "./types";
 
 // Weekly trend presets for mock data
 const WEEKLY_ALIGNED: WeeklyTrendHealth = {
@@ -25,6 +26,66 @@ function makeWeekly(
 ): WeeklyTrendHealth {
   return { ...base, weeklyClose, weeklyEMA20 };
 }
+
+// Divergence presets for mock data
+const NO_DIVERGENCE: DivergenceResult = EMPTY_DIVERGENCE_RESULT;
+
+const BULLISH_RSI_DIV: DivergenceResult = {
+  divergences: [{
+    type: 'bullish_rsi',
+    direction: 'bullish',
+    priceSwing1: { index: 30, value: 142.0, type: 'low' },
+    priceSwing2: { index: 45, value: 139.5, type: 'low' },
+    indicatorSwing1: { index: 30, value: 35.0, type: 'low' },
+    indicatorSwing2: { index: 45, value: 42.0, type: 'low' },
+    strength: 0.72,
+    barsAgo: 5,
+    scoreImpact: 8,
+    description: '📈 Bullish RSI divergence: price made lower low but RSI made higher low — momentum strengthening',
+  }],
+  hasBullish: true,
+  hasBearish: false,
+  netScoreImpact: 8,
+  summary: 'Bullish RSI divergence detected (recent)',
+};
+
+const BEARISH_RSI_DIV: DivergenceResult = {
+  divergences: [{
+    type: 'bearish_rsi',
+    direction: 'bearish',
+    priceSwing1: { index: 28, value: 690.0, type: 'high' },
+    priceSwing2: { index: 42, value: 698.0, type: 'high' },
+    indicatorSwing1: { index: 28, value: 68.0, type: 'high' },
+    indicatorSwing2: { index: 42, value: 58.0, type: 'high' },
+    strength: 0.65,
+    barsAgo: 8,
+    scoreImpact: -10,
+    description: '📉 Bearish RSI divergence: price made higher high but RSI made lower high — momentum weakening',
+  }],
+  hasBullish: false,
+  hasBearish: true,
+  netScoreImpact: -10,
+  summary: 'Bearish RSI divergence detected — caution',
+};
+
+const OBV_WARNING: DivergenceResult = {
+  divergences: [{
+    type: 'obv_divergence',
+    direction: 'bearish',
+    priceSwing1: { index: 25, value: 3880.0, type: 'high' },
+    priceSwing2: { index: 40, value: 3920.0, type: 'high' },
+    indicatorSwing1: { index: 25, value: 30000000, type: 'high' },
+    indicatorSwing2: { index: 40, value: 28500000, type: 'high' },
+    strength: 0.45,
+    barsAgo: 10,
+    scoreImpact: -5,
+    description: '⚠️ OBV divergence: price rising but volume flow declining — distribution possible',
+  }],
+  hasBullish: false,
+  hasBearish: true,
+  netScoreImpact: -5,
+  summary: 'OBV volume divergence warning',
+};
 
 // Realistic mock data for Indian equities that match various screener outcomes
 export const MOCK_STOCKS: Array<{
@@ -68,6 +129,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 144.0, ichimokuKijun: 142.0,
       ichimokuSenkouA: 143.0, ichimokuSenkouB: 139.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 145.2, 140.0),
+      divergences: BULLISH_RSI_DIV,
     },
   },
   {
@@ -106,6 +168,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 1680.0, ichimokuKijun: 1665.0,
       ichimokuSenkouA: 1672.0, ichimokuSenkouB: 1650.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1685.0, 1640.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   {
@@ -144,6 +207,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 2678.0, ichimokuKijun: 2660.0,
       ichimokuSenkouA: 2669.0, ichimokuSenkouB: 2640.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 2685.0, 2610.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   // BUY candidates - good but not perfect
@@ -183,6 +247,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 1515.0, ichimokuKijun: 1500.0,
       ichimokuSenkouA: 1507.0, ichimokuSenkouB: 1490.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1520.0, 1475.0),
+      divergences: BULLISH_RSI_DIV,
     },
   },
   {
@@ -221,6 +286,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 7835.0, ichimokuKijun: 7760.0,
       ichimokuSenkouA: 7797.0, ichimokuSenkouB: 7700.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_MIXED, 7850.0, 7700.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   {
@@ -259,6 +325,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 3915.0, ichimokuKijun: 3890.0,
       ichimokuSenkouA: 3902.0, ichimokuSenkouB: 3870.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3920.0, 3850.0),
+      divergences: OBV_WARNING,
     },
   },
   // WATCH candidates - trend established but no pullback yet
@@ -298,6 +365,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 1115.0, ichimokuKijun: 1100.0,
       ichimokuSenkouA: 1107.0, ichimokuSenkouB: 1085.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_MIXED, 1125.0, 1090.0),
+      divergences: OBV_WARNING,
     },
   },
   {
@@ -336,6 +404,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 1570.0, ichimokuKijun: 1550.0,
       ichimokuSenkouA: 1560.0, ichimokuSenkouB: 1530.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1580.0, 1520.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   // NEUTRAL - passes Phase 1 but fails Phase 2
@@ -375,6 +444,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 682.0, ichimokuKijun: 688.0,
       ichimokuSenkouA: 685.0, ichimokuSenkouB: 690.0, ichimokuCloudSignal: "below",
       weeklyTrend: makeWeekly(WEEKLY_COUNTER, 680.0, 695.0),
+      divergences: BEARISH_RSI_DIV,
     },
   },
   {
@@ -413,6 +483,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 486.0, ichimokuKijun: 490.0,
       ichimokuSenkouA: 488.0, ichimokuSenkouB: 492.0, ichimokuCloudSignal: "below",
       weeklyTrend: makeWeekly(WEEKLY_COUNTER, 485.0, 495.0),
+      divergences: BEARISH_RSI_DIV,
     },
   },
   // More BUY/STRONG BUY candidates
@@ -452,6 +523,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 3710.0, ichimokuKijun: 3685.0,
       ichimokuSenkouA: 3697.0, ichimokuSenkouB: 3670.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3720.0, 3630.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   {
@@ -490,6 +562,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 1705.0, ichimokuKijun: 1690.0,
       ichimokuSenkouA: 1697.0, ichimokuSenkouB: 1680.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1710.0, 1660.0),
+      divergences: BULLISH_RSI_DIV,
     },
   },
   {
@@ -528,6 +601,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 12420.0, ichimokuKijun: 12320.0,
       ichimokuSenkouA: 12370.0, ichimokuSenkouB: 12250.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 12450.0, 12100.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   {
@@ -566,6 +640,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 3515.0, ichimokuKijun: 3490.0,
       ichimokuSenkouA: 3502.0, ichimokuSenkouB: 3470.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3520.0, 3440.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   {
@@ -604,6 +679,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 2375.0, ichimokuKijun: 2360.0,
       ichimokuSenkouA: 2367.0, ichimokuSenkouB: 2350.0, ichimokuCloudSignal: "above",
       weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 2380.0, 2330.0),
+      divergences: NO_DIVERGENCE,
     },
   },
   // AVOID candidates - fails Phase 1
@@ -643,6 +719,7 @@ export const MOCK_STOCKS: Array<{
       ichimokuTenkan: 127.0, ichimokuKijun: 132.0,
       ichimokuSenkouA: 129.5, ichimokuSenkouB: 135.0, ichimokuCloudSignal: "below",
       weeklyTrend: makeWeekly(WEEKLY_COUNTER, 125.0, 135.0),
+      divergences: NO_DIVERGENCE,
     },
   },
 ];

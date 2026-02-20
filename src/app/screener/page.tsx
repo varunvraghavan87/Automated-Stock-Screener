@@ -552,6 +552,14 @@ function StockRow({
             <Badge variant="outline" className="text-[10px]">
               {result.stock.sector}
             </Badge>
+            {result.sectorContext.sectorScoreImpact !== 0 && (
+              <Badge
+                variant={result.sectorContext.isTopSector ? "success" : "destructive"}
+                className="text-[10px]"
+              >
+                {result.sectorContext.isTopSector ? "▲" : "▼"} Sector #{result.sectorContext.sectorRank}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground truncate">
             {result.stock.name}
@@ -575,7 +583,7 @@ function StockRow({
         </div>
 
         {/* Signal */}
-        <div className="hidden md:block">
+        <div className="hidden md:flex items-center gap-1.5">
           <Badge
             variant={
               result.signal === "STRONG_BUY"
@@ -590,6 +598,16 @@ function StockRow({
           >
             {result.signal.replace("_", " ")}
           </Badge>
+          {result.phase3Details.divergenceResult.hasBullish && (
+            <Badge variant="success" className="text-[10px] gap-0.5">
+              Bull Div
+            </Badge>
+          )}
+          {result.phase3Details.divergenceResult.hasBearish && (
+            <Badge variant="destructive" className="text-[10px] gap-0.5">
+              Bear Div
+            </Badge>
+          )}
         </div>
 
         {/* Phase Indicators */}
@@ -668,6 +686,35 @@ function StockRow({
                         `Weekly Trend: ${result.phase2WeeklyTrend.status} (${result.phase2WeeklyTrend.score > 0 ? "+" : ""}${result.phase2WeeklyTrend.score} pts) — Close ${result.phase2WeeklyTrend.closeAboveEMA20 ? ">" : "<"} EMA20, RSI ${result.phase2WeeklyTrend.weeklyRSI.toFixed(1)}, MACD Hist ${result.phase2WeeklyTrend.macdHistPositive ? "+" : "-"}`,
                       ]}
                     />
+                    {/* Sector Rotation Context */}
+                    <div className={`p-3 rounded-lg border ${
+                      result.sectorContext.isTopSector
+                        ? "border-accent/20 bg-accent/5"
+                        : result.sectorContext.isBottomSector
+                          ? "border-destructive/20 bg-destructive/5"
+                          : "border-border bg-background/50"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold">
+                          Sector Rotation: {result.sectorContext.sectorName}
+                        </span>
+                        <Badge
+                          variant={
+                            result.sectorContext.isTopSector ? "success" :
+                            result.sectorContext.isBottomSector ? "destructive" : "outline"
+                          }
+                          className="text-[10px]"
+                        >
+                          #{result.sectorContext.sectorRank} of {result.sectorContext.totalSectors}
+                        </Badge>
+                      </div>
+                      <div className="space-y-0.5 text-xs text-muted-foreground pl-2">
+                        <p>Breadth: {result.sectorContext.sectorBreadth.toFixed(0)}% above EMA50</p>
+                        <p>Avg 3M RS: {result.sectorContext.sectorAvgRS3M > 0 ? "+" : ""}{result.sectorContext.sectorAvgRS3M.toFixed(1)}%</p>
+                        <p>Score Impact: {result.sectorContext.sectorScoreImpact > 0 ? "+" : ""}{result.sectorContext.sectorScoreImpact} pts</p>
+                      </div>
+                    </div>
+
                     <PhaseResult
                       phase={3}
                       title="Momentum Signal"
@@ -678,6 +725,7 @@ function StockRow({
                         `ROC Positive: ${result.phase3Details.rocPositive ? "Yes" : "No"}`,
                         `+DI > -DI: ${result.phase3Details.plusDIAboveMinusDI ? "Yes" : "No"}`,
                         `Stochastic Bullish: ${result.phase3Details.stochasticBullish ? "Yes" : "No"}`,
+                        `Divergences: ${result.phase3Details.divergenceResult.summary} (${result.phase3Details.divergenceScoreImpact > 0 ? "+" : ""}${result.phase3Details.divergenceScoreImpact} pts)`,
                       ]}
                     />
                     <PhaseResult
@@ -871,6 +919,36 @@ function StockRow({
                   label="Weekly RSI"
                   value={result.phase2WeeklyTrend.weeklyRSI.toFixed(1)}
                   status={result.phase2WeeklyTrend.rsiAbove40 ? "good" : "bad"}
+                />
+                {/* Divergence */}
+                <IndicatorCard
+                  label="Divergence"
+                  value={
+                    result.indicators.divergences.hasBullish
+                      ? "BULLISH"
+                      : result.indicators.divergences.hasBearish
+                        ? "BEARISH"
+                        : "NONE"
+                  }
+                  status={
+                    result.indicators.divergences.hasBullish
+                      ? "good"
+                      : result.indicators.divergences.hasBearish
+                        ? "bad"
+                        : "neutral"
+                  }
+                />
+                {/* Sector Rank */}
+                <IndicatorCard
+                  label={`Sector #${result.sectorContext.sectorRank}`}
+                  value={result.sectorContext.sectorName}
+                  status={
+                    result.sectorContext.isTopSector
+                      ? "good"
+                      : result.sectorContext.isBottomSector
+                        ? "bad"
+                        : "neutral"
+                  }
                 />
               </div>
             </TabsContent>

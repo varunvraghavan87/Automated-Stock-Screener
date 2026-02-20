@@ -85,6 +85,9 @@ export interface TechnicalIndicators {
 
   // Weekly Timeframe Indicators (aggregated from daily data)
   weeklyTrend: WeeklyTrendHealth;
+
+  // Divergence Detection
+  divergences: DivergenceResult;
 }
 
 // Weekly Trend Health — computed from aggregated daily→weekly candles
@@ -100,6 +103,48 @@ export interface WeeklyTrendHealth {
   score: number;                // +5 (aligned) or -10 (counter-trend) or 0 (mixed)
   status: 'aligned' | 'counter-trend' | 'mixed'; // Human-readable status
 }
+
+// ---- Divergence Detection Types ----
+
+export type DivergenceType =
+  | 'bullish_rsi' | 'bearish_rsi'
+  | 'bullish_macd' | 'bearish_macd'
+  | 'obv_divergence' | 'mfi_divergence';
+
+export interface SwingPoint {
+  index: number;       // Bar index in the array
+  value: number;       // Price or indicator value at this point
+  type: 'high' | 'low';
+}
+
+export interface Divergence {
+  type: DivergenceType;
+  direction: 'bullish' | 'bearish';
+  priceSwing1: SwingPoint;      // Earlier swing in price
+  priceSwing2: SwingPoint;      // Later swing in price
+  indicatorSwing1: SwingPoint;  // Earlier swing in indicator
+  indicatorSwing2: SwingPoint;  // Later swing in indicator
+  strength: number;             // 0-1 normalized magnitude
+  barsAgo: number;              // How many bars ago the divergence completed
+  scoreImpact: number;          // Points to add/subtract (+8 or -10 or -5)
+  description: string;          // Human-readable for rationale
+}
+
+export interface DivergenceResult {
+  divergences: Divergence[];
+  hasBullish: boolean;
+  hasBearish: boolean;
+  netScoreImpact: number;  // Clamped to [-15, +8]
+  summary: string;
+}
+
+export const EMPTY_DIVERGENCE_RESULT: DivergenceResult = {
+  divergences: [],
+  hasBullish: false,
+  hasBearish: false,
+  netScoreImpact: 0,
+  summary: 'No divergences detected',
+};
 
 // ---- Market Regime Types ----
 
@@ -127,6 +172,46 @@ export interface AdaptiveThresholds {
   watchThreshold: number;
 }
 
+// ---- Sector Rotation Types ----
+
+export interface SectorMetrics {
+  sector: string;
+  stockCount: number;
+  avgRelativeStrength3M: number;
+  avgWeekChange: number;
+  breadth: number;            // % of stocks with lastPrice > ema50 (0-100)
+  compositeScore: number;     // 50% normalized RS3M + 30% breadth + 20% normalized weekChange
+  rank: number;               // 1 = strongest, N = weakest
+}
+
+export interface SectorRankings {
+  rankings: SectorMetrics[];  // Sorted by rank ascending
+  totalSectors: number;
+  topSectors: string[];       // Top 3 sector names
+  bottomSectors: string[];    // Bottom 3 sector names
+}
+
+export interface SectorContext {
+  sectorName: string;
+  sectorRank: number;
+  totalSectors: number;
+  isTopSector: boolean;
+  isBottomSector: boolean;
+  sectorScoreImpact: number;  // +5, 0, or -5
+  sectorBreadth: number;
+  sectorAvgRS3M: number;
+}
+
+export const EMPTY_SECTOR_RANKINGS: SectorRankings = {
+  rankings: [], totalSectors: 0, topSectors: [], bottomSectors: [],
+};
+
+export const DEFAULT_SECTOR_CONTEXT: SectorContext = {
+  sectorName: 'Unknown', sectorRank: 0, totalSectors: 0,
+  isTopSector: false, isBottomSector: false, sectorScoreImpact: 0,
+  sectorBreadth: 0, sectorAvgRS3M: 0,
+};
+
 export interface ScreenerResult {
   stock: StockData;
   indicators: TechnicalIndicators;
@@ -143,6 +228,7 @@ export interface ScreenerResult {
   overallScore: number; // 0-100
   signal: "STRONG_BUY" | "BUY" | "WATCH" | "NEUTRAL" | "AVOID";
   rationale: string;
+  sectorContext: SectorContext;
 }
 
 export interface ScreenerResponse {
@@ -159,6 +245,7 @@ export interface ScreenerResponse {
     phase5Volatility: number;
   };
   results: ScreenerResult[];
+  sectorRankings: SectorRankings;
   config?: ScreenerConfig;
 }
 
@@ -175,6 +262,8 @@ export interface Phase3Details {
   plusDIAboveMinusDI: boolean;
   stochasticBullish: boolean;
   macdBullish: boolean;
+  divergenceResult: DivergenceResult;
+  divergenceScoreImpact: number; // Net score impact from divergences (-15 to +8)
 }
 
 export interface Phase4VolumeDetails {

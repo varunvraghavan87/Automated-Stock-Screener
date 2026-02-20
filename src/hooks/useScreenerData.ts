@@ -6,6 +6,7 @@ import type {
   ScreenerConfig,
   MarketRegimeInfo,
   AdaptiveThresholds,
+  SectorRankings,
 } from "@/lib/types";
 
 interface KiteStatus {
@@ -23,6 +24,7 @@ export interface UseScreenerDataReturn {
   kiteStatus: KiteStatus;
   marketRegime: MarketRegimeInfo;
   adaptiveThresholds: AdaptiveThresholds;
+  sectorRankings: SectorRankings;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;

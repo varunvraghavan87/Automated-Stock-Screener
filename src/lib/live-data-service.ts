@@ -24,6 +24,7 @@ import {
   detectCandlestickPattern,
   calculateVROC,
   aggregateDailyToWeekly,
+  detectDivergences,
 } from "./indicators";
 
 // Sector mapping for common NSE stocks (extend as needed)
@@ -375,6 +376,10 @@ export class LiveDataService {
     // Aggregate daily candles into weekly candles, then compute weekly EMA20, RSI, MACD
     const weeklyTrend = this.computeWeeklyTrend(history, lastClose);
 
+    // ---- Divergence Detection ----
+    // All arrays already computed above — detect RSI, MACD, OBV, MFI divergences
+    const divergences = detectDivergences(close, rsi, macd.histogram, obv, mfi);
+
     return {
       ema20: last(ema20),
       ema50: last(ema50),
@@ -415,6 +420,7 @@ export class LiveDataService {
       ichimokuSenkouB: !isNaN(senkouB) ? senkouB : 0,
       ichimokuCloudSignal,
       weeklyTrend,
+      divergences,
     };
   }
 
