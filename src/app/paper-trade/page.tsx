@@ -17,6 +17,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+  ReferenceLine,
+} from "recharts";
+import {
   LineChart,
   TrendingUp,
   TrendingDown,
@@ -26,13 +39,104 @@ import {
   XCircle,
   RefreshCw,
   Clock,
+  BarChart3,
 } from "lucide-react";
 import { usePaperTrade } from "@/contexts/PaperTradeContext";
 import { usePriceUpdate } from "@/contexts/PriceUpdateContext";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { CloseTradeDialog } from "@/components/trade-actions/CloseTradeDialog";
-import { formatCurrency, formatPercent } from "@/lib/utils";
-import type { PaperTrade, DivergenceResult } from "@/lib/types";
+import { computePortfolioAnalytics } from "@/lib/portfolio-analytics";
+import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
+import type { PaperTrade, DivergenceResult, MonthlyReturn } from "@/lib/types";
+
+// ---- Chart Constants (matching signals page dark theme) ----
+
+const CHART_TOOLTIP_STYLE = {
+  contentStyle: {
+    backgroundColor: "#141826",
+    border: "1px solid #1e293b",
+    borderRadius: "8px",
+  },
+};
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// ---- Monthly Returns Heatmap Component ----
+
+function MonthlyReturnsHeatmap({ data }: { data: MonthlyReturn[] }) {
+  if (data.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground text-center py-4">
+        No monthly data yet
+      </p>
+    );
+  }
+
+  const years = [...new Set(data.map((d) => d.year))].sort();
+  const lookup = new Map(data.map((d) => [`${d.year}-${d.month}`, d]));
+
+  function cellColor(returnPercent: number): string {
+    if (returnPercent > 5) return "bg-green-600/80 text-white";
+    if (returnPercent > 2) return "bg-green-500/60 text-white";
+    if (returnPercent > 0) return "bg-green-400/30 text-green-300";
+    if (returnPercent === 0) return "bg-muted/30 text-muted-foreground";
+    if (returnPercent > -2) return "bg-red-400/30 text-red-300";
+    if (returnPercent > -5) return "bg-red-500/60 text-white";
+    return "bg-red-600/80 text-white";
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      {/* Column headers */}
+      <div className="grid grid-cols-[60px_repeat(12,1fr)] gap-1 mb-1">
+        <div />
+        {MONTH_NAMES.map((m) => (
+          <div
+            key={m}
+            className="text-center text-[10px] text-muted-foreground font-medium"
+          >
+            {m}
+          </div>
+        ))}
+      </div>
+
+      {/* Rows: one per year */}
+      {years.map((year) => (
+        <div
+          key={year}
+          className="grid grid-cols-[60px_repeat(12,1fr)] gap-1 mb-1"
+        >
+          <div className="text-xs text-muted-foreground font-mono flex items-center">
+            {year}
+          </div>
+          {Array.from({ length: 12 }, (_, month) => {
+            const entry = lookup.get(`${year}-${month}`);
+            if (!entry) {
+              return (
+                <div key={month} className="h-8 rounded bg-muted/10" />
+              );
+            }
+            return (
+              <div
+                key={month}
+                className={`h-8 rounded flex items-center justify-center text-[10px] font-mono ${cellColor(entry.returnPercent)}`}
+                title={`${MONTH_NAMES[month]} ${year}: ${entry.returnPercent >= 0 ? "+" : ""}${entry.returnPercent.toFixed(1)}% (${entry.tradeCount} trades)`}
+              >
+                {entry.returnPercent >= 0 ? "+" : ""}
+                {entry.returnPercent.toFixed(1)}%
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Main Page Component ----
 
 export default function PaperTradePage() {
   const {
@@ -66,6 +170,12 @@ export default function PaperTradePage() {
   const winCount = closedTrades.filter((t) => (t.realizedPnl ?? 0) > 0).length;
   const winRate =
     closedTrades.length > 0 ? (winCount / closedTrades.length) * 100 : 0;
+
+  // Portfolio analytics — computed from closed trades only
+  const analytics = useMemo(
+    () => computePortfolioAnalytics(closedTrades),
+    [closedTrades]
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -192,6 +302,10 @@ export default function PaperTradePage() {
             <TabsTrigger value="closed">
               Closed Trades ({closedTrades.length})
             </TabsTrigger>
+            <TabsTrigger value="analytics">
+              <BarChart3 className="w-4 h-4 mr-1" />
+              Analytics
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="open" className="space-y-2 mt-4">
@@ -277,7 +391,7 @@ export default function PaperTradePage() {
                           <div className="col-span-6 md:col-span-1 text-right font-mono text-sm text-muted-foreground">
                             {trade.stopLoss
                               ? formatCurrency(trade.stopLoss)
-                              : "—"}
+                              : "\u2014"}
                           </div>
                           <div className="col-span-6 md:col-span-2 text-right space-x-1">
                             <Tooltip>
@@ -364,7 +478,7 @@ export default function PaperTradePage() {
                           <div className="col-span-2 md:col-span-2 text-right font-mono">
                             {trade.exitPrice
                               ? formatCurrency(trade.exitPrice)
-                              : "—"}
+                              : "\u2014"}
                           </div>
                           <div className="col-span-3 md:col-span-2 text-right">
                             <span
@@ -401,6 +515,433 @@ export default function PaperTradePage() {
                   );
                 })}
               </div>
+            )}
+          </TabsContent>
+
+          {/* ---- Analytics Tab ---- */}
+          <TabsContent value="analytics" className="space-y-6 mt-4">
+            {closedTrades.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No closed trades to analyze</p>
+                  <p className="text-sm mt-1">
+                    Close some trades to see portfolio analytics
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Section A: Metric Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {[
+                    {
+                      label: "Sharpe Ratio",
+                      value:
+                        analytics.sharpeRatio != null
+                          ? formatNumber(analytics.sharpeRatio)
+                          : "N/A",
+                      color:
+                        (analytics.sharpeRatio ?? 0) >= 1
+                          ? "text-green-500"
+                          : (analytics.sharpeRatio ?? 0) >= 0
+                            ? "text-amber-400"
+                            : "text-red-500",
+                    },
+                    {
+                      label: "Sortino Ratio",
+                      value:
+                        analytics.sortinoRatio != null
+                          ? formatNumber(analytics.sortinoRatio)
+                          : "N/A",
+                      color:
+                        (analytics.sortinoRatio ?? 0) >= 1.5
+                          ? "text-green-500"
+                          : (analytics.sortinoRatio ?? 0) >= 0
+                            ? "text-amber-400"
+                            : "text-red-500",
+                    },
+                    {
+                      label: "Max Drawdown",
+                      value:
+                        analytics.maxDrawdown != null
+                          ? `${formatNumber(analytics.maxDrawdown)}%`
+                          : "N/A",
+                      color: "text-red-500",
+                    },
+                    {
+                      label: "Profit Factor",
+                      value:
+                        analytics.profitFactor != null
+                          ? formatNumber(analytics.profitFactor)
+                          : "N/A",
+                      color:
+                        (analytics.profitFactor ?? 0) >= 1.5
+                          ? "text-green-500"
+                          : "text-amber-400",
+                    },
+                    {
+                      label: "Win Rate",
+                      value: `${formatNumber(analytics.winRate, 0)}%`,
+                      color:
+                        analytics.winRate >= 50
+                          ? "text-green-500"
+                          : "text-red-500",
+                    },
+                    {
+                      label: "Avg Win",
+                      value:
+                        analytics.avgWin != null
+                          ? formatCurrency(analytics.avgWin)
+                          : "N/A",
+                      color: "text-green-500",
+                    },
+                    {
+                      label: "Avg Loss",
+                      value:
+                        analytics.avgLoss != null
+                          ? formatCurrency(Math.abs(analytics.avgLoss))
+                          : "N/A",
+                      color: "text-red-500",
+                    },
+                    {
+                      label: "Consec. Wins",
+                      value: String(analytics.maxConsecutiveWins),
+                      color: "text-green-500",
+                    },
+                    {
+                      label: "Consec. Losses",
+                      value: String(analytics.maxConsecutiveLosses),
+                      color: "text-red-500",
+                    },
+                    {
+                      label: "Avg Hold",
+                      value:
+                        analytics.avgHoldingPeriodDays != null
+                          ? `${formatNumber(analytics.avgHoldingPeriodDays, 1)}d`
+                          : "N/A",
+                      color: "text-muted-foreground",
+                    },
+                  ].map((metric) => (
+                    <Card key={metric.label}>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          {metric.label}
+                        </p>
+                        <p
+                          className={`text-xl font-bold font-mono ${metric.color}`}
+                        >
+                          {metric.value}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Section B: Equity Curve + Drawdown */}
+                <Card className="bg-card/50 backdrop-blur border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Equity Curve</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analytics.equityCurve}>
+                          <defs>
+                            <linearGradient
+                              id="equityGradient"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#10b981"
+                                stopOpacity={0.3}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#10b981"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#1e293b"
+                          />
+                          <XAxis
+                            dataKey="date"
+                            stroke="#94a3b8"
+                            fontSize={10}
+                            tickFormatter={(v) =>
+                              new Date(v).toLocaleDateString("en-IN", {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            }
+                          />
+                          <YAxis stroke="#94a3b8" fontSize={12} />
+                          <RechartsTooltip
+                            {...CHART_TOOLTIP_STYLE}
+                            labelFormatter={(v) =>
+                              new Date(String(v)).toLocaleDateString("en-IN")
+                            }
+                            formatter={(value) => [
+                              formatCurrency(Number(value ?? 0)),
+                              "Equity",
+                            ]}
+                          />
+                          <ReferenceLine
+                            y={100000}
+                            stroke="#94a3b8"
+                            strokeDasharray="3 3"
+                            label={{
+                              value: "Starting Capital",
+                              position: "right",
+                              fill: "#94a3b8",
+                              fontSize: 10,
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="equity"
+                            stroke="#10b981"
+                            fill="url(#equityGradient)"
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card/50 backdrop-blur border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Drawdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analytics.equityCurve}>
+                          <defs>
+                            <linearGradient
+                              id="drawdownGradient"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#ef4444"
+                                stopOpacity={0.4}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#ef4444"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#1e293b"
+                          />
+                          <XAxis
+                            dataKey="date"
+                            stroke="#94a3b8"
+                            fontSize={10}
+                            tickFormatter={(v) =>
+                              new Date(v).toLocaleDateString("en-IN", {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            }
+                          />
+                          <YAxis
+                            stroke="#94a3b8"
+                            fontSize={12}
+                            tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
+                          />
+                          <RechartsTooltip
+                            {...CHART_TOOLTIP_STYLE}
+                            labelFormatter={(v) =>
+                              new Date(String(v)).toLocaleDateString("en-IN")
+                            }
+                            formatter={(value) => [
+                              `${Number(value ?? 0).toFixed(2)}%`,
+                              "Drawdown",
+                            ]}
+                          />
+                          <ReferenceLine y={0} stroke="#94a3b8" />
+                          <Area
+                            type="monotone"
+                            dataKey="drawdown"
+                            stroke="#ef4444"
+                            fill="url(#drawdownGradient)"
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Section C: Monthly Heatmap + Win Rate by Signal */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">Monthly Returns</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <MonthlyReturnsHeatmap data={analytics.monthlyReturns} />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">
+                        Win Rate by Signal
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {analytics.winRateBySignal.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No signal data
+                        </p>
+                      ) : (
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={analytics.winRateBySignal}
+                              layout="vertical"
+                            >
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="#1e293b"
+                              />
+                              <XAxis
+                                type="number"
+                                stroke="#94a3b8"
+                                fontSize={12}
+                                domain={[0, 100]}
+                                tickFormatter={(v) => `${v}%`}
+                              />
+                              <YAxis
+                                type="category"
+                                dataKey="group"
+                                stroke="#94a3b8"
+                                fontSize={11}
+                                width={100}
+                              />
+                              <RechartsTooltip
+                                {...CHART_TOOLTIP_STYLE}
+                                formatter={(value) => [
+                                  `${Number(value ?? 0).toFixed(1)}%`,
+                                  "Win Rate",
+                                ]}
+                              />
+                              <Bar dataKey="winRate" radius={[0, 4, 4, 0]}>
+                                {analytics.winRateBySignal.map(
+                                  (entry, index) => (
+                                    <Cell
+                                      key={`cell-${index}`}
+                                      fill={
+                                        entry.winRate >= 50
+                                          ? "#10b981"
+                                          : "#ef4444"
+                                      }
+                                    />
+                                  )
+                                )}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Section D: Win Rate by Sector Table */}
+                {analytics.winRateBySector.length > 0 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">
+                        Win Rate by Sector
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">
+                                Sector
+                              </th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">
+                                Trades
+                              </th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">
+                                Wins
+                              </th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">
+                                Win Rate
+                              </th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">
+                                Total P&L
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analytics.winRateBySector.map((s) => (
+                              <tr
+                                key={s.group}
+                                className="border-b border-border/50 hover:bg-secondary/30"
+                              >
+                                <td className="py-2 px-2 text-sm">
+                                  {s.group}
+                                </td>
+                                <td className="text-right py-2 px-2 font-mono text-sm">
+                                  {s.total}
+                                </td>
+                                <td className="text-right py-2 px-2 font-mono text-sm">
+                                  {s.wins}
+                                </td>
+                                <td className="text-right py-2 px-2 font-mono text-sm">
+                                  <span
+                                    className={
+                                      s.winRate >= 50
+                                        ? "text-green-500"
+                                        : "text-red-500"
+                                    }
+                                  >
+                                    {s.winRate.toFixed(1)}%
+                                  </span>
+                                </td>
+                                <td className="text-right py-2 px-2 font-mono text-sm">
+                                  <span
+                                    className={
+                                      s.totalPnl >= 0
+                                        ? "text-green-500"
+                                        : "text-red-500"
+                                    }
+                                  >
+                                    {s.totalPnl >= 0 ? "+" : ""}
+                                    {formatCurrency(s.totalPnl)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </TabsContent>
         </Tabs>

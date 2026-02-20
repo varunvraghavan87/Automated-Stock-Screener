@@ -377,6 +377,51 @@ export interface PaperTradeCloseInput {
   exitReason?: "manual" | "stop_loss_hit" | "target_hit";
 }
 
+// ---- Portfolio Analytics Types ----
+
+export interface EquityCurvePoint {
+  date: string;
+  equity: number;
+  drawdown: number;       // Negative % from peak (e.g., -5.2)
+  drawdownAbs: number;    // Absolute currency drawdown
+}
+
+export interface MonthlyReturn {
+  year: number;
+  month: number;          // 0-11
+  pnl: number;
+  returnPercent: number;
+  tradeCount: number;
+}
+
+export interface WinRateByGroup {
+  group: string;          // Signal name or sector name
+  wins: number;
+  losses: number;
+  total: number;
+  winRate: number;        // 0-100
+  totalPnl: number;
+}
+
+export interface PortfolioAnalytics {
+  sharpeRatio: number | null;
+  sortinoRatio: number | null;
+  maxDrawdown: number | null;        // Percentage (negative, e.g., -12.5)
+  maxDrawdownAbs: number | null;     // Absolute currency value
+  profitFactor: number | null;
+  avgWin: number | null;
+  avgLoss: number | null;
+  maxConsecutiveWins: number;
+  maxConsecutiveLosses: number;
+  avgHoldingPeriodDays: number | null;
+  totalTrades: number;
+  winRate: number;                   // 0-100
+  winRateBySignal: WinRateByGroup[];
+  winRateBySector: WinRateByGroup[];
+  equityCurve: EquityCurvePoint[];
+  monthlyReturns: MonthlyReturn[];
+}
+
 // ---- Watchlist Types ----
 
 export interface WatchlistItem {
