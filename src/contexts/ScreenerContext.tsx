@@ -47,6 +47,88 @@ interface ScreenerContextValue {
   disconnectKite: () => Promise<void>;
 }
 
+// ─── Session Storage Persistence ─────────────────────────────────────────────
+const STORAGE_KEY = "nva_screener_state";
+const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+interface PersistedScreenerState {
+  version: 1;
+  savedAt: number; // Date.now()
+  results: ScreenerResult[];
+  marketRegime: MarketRegimeInfo;
+  adaptiveThresholds: AdaptiveThresholds;
+  sectorRankings: SectorRankings;
+  kiteStatus: KiteStatus;
+  lastRefresh: string; // ISO string (Date is not JSON-serializable)
+}
+
+function saveToSessionStorage(state: {
+  results: ScreenerResult[];
+  marketRegime: MarketRegimeInfo;
+  adaptiveThresholds: AdaptiveThresholds;
+  sectorRankings: SectorRankings;
+  kiteStatus: KiteStatus;
+  lastRefresh: Date;
+}): void {
+  try {
+    const payload: PersistedScreenerState = {
+      version: 1,
+      savedAt: Date.now(),
+      results: state.results,
+      marketRegime: state.marketRegime,
+      adaptiveThresholds: state.adaptiveThresholds,
+      sectorRankings: state.sectorRankings,
+      kiteStatus: state.kiteStatus,
+      lastRefresh: state.lastRefresh.toISOString(),
+    };
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Silently fail — QuotaExceededError or SecurityError in private browsing
+  }
+}
+
+function loadFromSessionStorage(): PersistedScreenerState | null {
+  try {
+    if (typeof window === "undefined") return null; // SSR guard
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as PersistedScreenerState;
+
+    // Version check
+    if (parsed.version !== 1) return null;
+
+    // Staleness check
+    const age = Date.now() - parsed.savedAt;
+    if (age > STALE_THRESHOLD_MS) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
+    // Basic structural validation
+    if (!Array.isArray(parsed.results) || parsed.results.length === 0) return null;
+    if (!parsed.marketRegime?.regime) return null;
+
+    return parsed;
+  } catch {
+    // JSON parse error or any other failure — clean up corrupted data
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+function clearSessionStorage(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Not critical
+  }
+}
+
 const ScreenerContext = createContext<ScreenerContextValue | null>(null);
 
 export function useScreenerContext(): ScreenerContextValue {
@@ -65,22 +147,35 @@ const DEFAULT_DEMO_REGIME: MarketRegimeInfo = detectMarketRegime(
 );
 
 export function ScreenerProvider({ children }: { children: ReactNode }) {
-  // Initialize with client-side screener results (demo data)
+  // Attempt to restore persisted live state (called once during initialization)
+  const cachedState = useRef(loadFromSessionStorage());
+
+  // Initialize with cached live data if available, otherwise demo data
   const defaultThresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
   const defaultSectorRankings = computeSectorRankings(MOCK_STOCKS);
   const [results, setResults] = useState<ScreenerResult[]>(() =>
+    cachedState.current?.results ??
     runScreener(MOCK_STOCKS, undefined, defaultThresholds, defaultSectorRankings)
   );
-  const [mode, setMode] = useState<"live" | "demo">("demo");
-  const [sectorRankings, setSectorRankings] = useState<SectorRankings>(defaultSectorRankings);
+  const [mode, setMode] = useState<"live" | "demo">(
+    cachedState.current ? "live" : "demo"
+  );
+  const [sectorRankings, setSectorRankings] = useState<SectorRankings>(
+    cachedState.current?.sectorRankings ?? defaultSectorRankings
+  );
   const [loading, setLoading] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [kiteStatus, setKiteStatus] = useState<KiteStatus>({
-    connected: false,
-    configured: false,
-  });
-  const [marketRegime, setMarketRegime] = useState<MarketRegimeInfo>(DEFAULT_DEMO_REGIME);
-  const [adaptiveThresholds, setAdaptiveThresholds] = useState<AdaptiveThresholds>(defaultThresholds);
+  const [lastRefresh, setLastRefresh] = useState<Date>(
+    cachedState.current ? new Date(cachedState.current.lastRefresh) : new Date()
+  );
+  const [kiteStatus, setKiteStatus] = useState<KiteStatus>(
+    cachedState.current?.kiteStatus ?? { connected: false, configured: false }
+  );
+  const [marketRegime, setMarketRegime] = useState<MarketRegimeInfo>(
+    cachedState.current?.marketRegime ?? DEFAULT_DEMO_REGIME
+  );
+  const [adaptiveThresholds, setAdaptiveThresholds] = useState<AdaptiveThresholds>(
+    cachedState.current?.adaptiveThresholds ?? defaultThresholds
+  );
 
   // Track whether we've already done the initial auto-refresh
   const hasAutoRefreshed = useRef(false);
@@ -134,6 +229,15 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
           if (data.sectorRankings) {
             setSectorRankings(data.sectorRankings as SectorRankings);
           }
+          // Persist live state to sessionStorage for page-reload resilience
+          saveToSessionStorage({
+            results: data.results as ScreenerResult[],
+            marketRegime: (data.marketRegime as MarketRegimeInfo) ?? marketRegime,
+            adaptiveThresholds: (data.adaptiveThresholds as AdaptiveThresholds) ?? adaptiveThresholds,
+            sectorRankings: (data.sectorRankings as SectorRankings) ?? sectorRankings,
+            kiteStatus,
+            lastRefresh: new Date(data.timestamp),
+          });
         } else {
           // Demo mode: run screener client-side with mock data + adaptive thresholds
           const regime = data.marketRegime || DEFAULT_DEMO_REGIME;
@@ -167,14 +271,28 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
     [checkKiteStatus]
   );
 
-  // On mount: check Kite status, auto-refresh if connected
+  // On mount: check Kite status, auto-refresh if connected, handle stale cache
   useEffect(() => {
     const init = async () => {
       const status = await checkKiteStatus();
       if (status?.connected && !hasAutoRefreshed.current) {
         hasAutoRefreshed.current = true;
         await refresh();
+      } else if (!status?.connected && cachedState.current) {
+        // Kite disconnected but we loaded cached data — clear cache and revert to demo
+        clearSessionStorage();
+        setMode("demo");
+        const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
+        const demoSectorRankings = computeSectorRankings(MOCK_STOCKS);
+        const freshResults = runScreener(MOCK_STOCKS, undefined, thresholds, demoSectorRankings);
+        setResults(freshResults);
+        setLastRefresh(new Date());
+        setMarketRegime(DEFAULT_DEMO_REGIME);
+        setAdaptiveThresholds(thresholds);
+        setSectorRankings(demoSectorRankings);
       }
+      // Allow GC of cached data after initialization
+      cachedState.current = null;
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,6 +307,7 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
   const disconnectKite = useCallback(async () => {
     try {
       await fetch("/api/kite/logout", { method: "POST" });
+      clearSessionStorage();
       setKiteStatus({ connected: false, configured: kiteStatus.configured });
       setMode("demo");
       // Revert to demo data since Kite is disconnected
