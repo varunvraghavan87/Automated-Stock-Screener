@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -23,6 +23,9 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
+  History,
+  Trophy,
+  AlertTriangle,
 } from "lucide-react";
 import {
   AreaChart,
@@ -42,15 +45,81 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
+  LineChart,
+  Line,
 } from "recharts";
 import { generateHistoricalPrices } from "@/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
+import { computeSignalPerformance } from "@/lib/signal-performance";
+import type { SignalSnapshot, ScreenerSnapshot } from "@/lib/types";
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8", "#ef4444"];
+const HIT_RATE_COLORS = ["#10b981", "#ef4444", "#f59e0b"]; // target hit, stopped out, expired
+const CHART_TOOLTIP_STYLE = {
+  contentStyle: {
+    backgroundColor: "#141826",
+    border: "1px solid #1e293b",
+    borderRadius: "8px",
+  },
+};
+const RETURN_PERIOD_COLORS = ["#94a3b8", "#3b82f6", "#8b5cf6", "#10b981"]; // 1d, 3d, 5d, 10d
 
 export default function SignalsPage() {
   const { results, mode, loading, lastRefresh, marketRegime, sectorRankings, refresh } = useScreenerData();
+
+  // ---- Signal Performance State ----
+  const [perfDays, setPerfDays] = useState(30);
+  const [perfSignals, setPerfSignals] = useState<SignalSnapshot[]>([]);
+  const [perfSnapshots, setPerfSnapshots] = useState<ScreenerSnapshot[]>([]);
+  const [perfLoading, setPerfLoading] = useState(false);
+  const [perfError, setPerfError] = useState<string | null>(null);
+
+  const fetchPerformanceData = useCallback(async (days: number) => {
+    setPerfLoading(true);
+    setPerfError(null);
+    try {
+      const response = await fetch(`/api/signal-performance?days=${days}`);
+      if (!response.ok) throw new Error("Failed to fetch performance data");
+      const data = await response.json();
+      setPerfSignals(data.signals || []);
+      setPerfSnapshots(data.snapshots || []);
+    } catch (err) {
+      setPerfError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setPerfLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPerformanceData(perfDays);
+  }, [perfDays, fetchPerformanceData]);
+
+  const perfAnalytics = useMemo(
+    () => computeSignalPerformance(perfSignals, perfSnapshots),
+    [perfSignals, perfSnapshots]
+  );
+
+  // Prepare hit rate donut data
+  const hitRateDonutData = useMemo(() => {
+    const { hitRate } = perfAnalytics;
+    return [
+      { name: "Target Hit", value: hitRate.targetHit },
+      { name: "Stopped Out", value: hitRate.stoppedOut },
+      { name: "Expired", value: hitRate.expired },
+    ].filter((d) => d.value > 0);
+  }, [perfAnalytics]);
+
+  // Prepare avg return chart data
+  const avgReturnChartData = useMemo(() => {
+    return perfAnalytics.avgReturnByPeriod.map((r) => ({
+      signal: r.signal.replace("_", " "),
+      "1D": r.avgReturn1d ?? 0,
+      "3D": r.avgReturn3d ?? 0,
+      "5D": r.avgReturn5d ?? 0,
+      "10D": r.avgReturn10d ?? 0,
+    }));
+  }, [perfAnalytics]);
 
   const signalDistribution = useMemo(() => {
     const dist: Record<string, number> = {
@@ -272,6 +341,7 @@ export default function SignalsPage() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="analysis">Top Pick Analysis</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="performance"><History className="w-4 h-4 mr-1" /> Performance</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -750,6 +820,407 @@ export default function SignalsPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* ---- Performance Tab ---- */}
+          <TabsContent value="performance">
+            {/* Period Selector */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold">Signal Performance</h2>
+                <p className="text-sm text-muted-foreground">
+                  Track how screener signals performed over time
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {[7, 30, 90].map((d) => (
+                  <Button
+                    key={d}
+                    variant={perfDays === d ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerfDays(d)}
+                    disabled={perfLoading}
+                  >
+                    {d}d
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {perfLoading ? (
+              <Card className="bg-card/50 backdrop-blur border-border">
+                <CardContent className="py-16 text-center">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground">Loading performance data...</p>
+                </CardContent>
+              </Card>
+            ) : perfError ? (
+              <Card className="bg-card/50 backdrop-blur border-border">
+                <CardContent className="py-16 text-center">
+                  <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-amber-500" />
+                  <p className="text-muted-foreground">{perfError}</p>
+                  <Button variant="outline" size="sm" className="mt-4" onClick={() => fetchPerformanceData(perfDays)}>
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : perfSignals.length === 0 ? (
+              <Card className="bg-card/50 backdrop-blur border-border">
+                <CardContent className="py-16 text-center">
+                  <History className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-lg font-medium mb-1">No signal history yet</p>
+                  <p className="text-muted-foreground text-sm">
+                    Run the screener to start tracking signal performance. Results are saved automatically.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {/* Section A — 5 Metric Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">Total Signals</p>
+                      <p className="text-2xl font-bold font-mono">{perfAnalytics.totalSignals}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">Win Rate (BUY+)</p>
+                      <p className={`text-2xl font-bold font-mono ${
+                        perfAnalytics.winRateBySignal.length > 0 &&
+                        perfAnalytics.winRateBySignal.reduce((s, w) => s + w.wins, 0) > 0
+                          ? (perfAnalytics.winRateBySignal.reduce((s, w) => s + w.wins, 0) /
+                            Math.max(perfAnalytics.winRateBySignal.reduce((s, w) => s + w.wins + w.losses, 0), 1)) * 100 >= 50
+                            ? "text-green-500"
+                            : "text-red-500"
+                          : "text-muted-foreground"
+                      }`}>
+                        {perfAnalytics.winRateBySignal.length > 0
+                          ? `${(
+                              (perfAnalytics.winRateBySignal.reduce((s, w) => s + w.wins, 0) /
+                                Math.max(
+                                  perfAnalytics.winRateBySignal.reduce((s, w) => s + w.wins + w.losses, 0),
+                                  1
+                                )) *
+                              100
+                            ).toFixed(1)}%`
+                          : "—"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">Target Hit Rate</p>
+                      <p className="text-2xl font-bold font-mono text-green-500">
+                        {perfAnalytics.hitRate.targetHitPct.toFixed(1)}%
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">Stopped Out Rate</p>
+                      <p className="text-2xl font-bold font-mono text-red-500">
+                        {perfAnalytics.hitRate.stoppedOutPct.toFixed(1)}%
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">Screener Runs</p>
+                      <p className="text-2xl font-bold font-mono">{perfAnalytics.totalSnapshots}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Section B — Win Rate by Signal + Hit Rate Donut */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Win Rate by Signal</CardTitle>
+                      <CardDescription>
+                        Target hit vs stopped out for BUY and STRONG_BUY signals
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {perfAnalytics.winRateBySignal.length > 0 ? (
+                        <div className="h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={perfAnalytics.winRateBySignal.map((w) => ({
+                                signal: w.signal.replace("_", " "),
+                                winRate: Number(w.winRate.toFixed(1)),
+                                total: w.total,
+                              }))}
+                              layout="vertical"
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                              <XAxis type="number" stroke="#94a3b8" fontSize={12} domain={[0, 100]} />
+                              <YAxis type="category" dataKey="signal" stroke="#94a3b8" fontSize={11} width={100} />
+                              <Tooltip {...CHART_TOOLTIP_STYLE} />
+                              <Bar dataKey="winRate" radius={[0, 4, 4, 0]}>
+                                {perfAnalytics.winRateBySignal.map((w, i) => (
+                                  <Cell key={`wr-${i}`} fill={w.winRate >= 50 ? "#10b981" : "#ef4444"} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                          No resolved signals yet. Outcomes are determined after 10 trading days.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Hit Rate Breakdown</CardTitle>
+                      <CardDescription>
+                        Outcome distribution for actionable signals
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {hitRateDonutData.length > 0 ? (
+                        <div className="h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={hitRateDonutData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={50}
+                                outerRadius={80}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {hitRateDonutData.map((_, index) => (
+                                  <Cell key={`hr-${index}`} fill={HIT_RATE_COLORS[index % HIT_RATE_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip {...CHART_TOOLTIP_STYLE} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="flex justify-center gap-4 mt-2">
+                            {hitRateDonutData.map((item, i) => (
+                              <div key={item.name} className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: HIT_RATE_COLORS[i] }} />
+                                <span className="text-xs text-muted-foreground">{item.name} ({item.value})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                          Pending: {perfAnalytics.hitRate.pending} signals awaiting outcome
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Section C — Avg Return by Period */}
+                {avgReturnChartData.length > 0 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Average Return by Period</CardTitle>
+                      <CardDescription>
+                        Mean % return after 1, 3, 5, and 10 trading days by signal type
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={avgReturnChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <XAxis dataKey="signal" stroke="#94a3b8" fontSize={11} />
+                            <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip
+                              {...CHART_TOOLTIP_STYLE}
+                              formatter={(value) => [`${Number(value ?? 0).toFixed(2)}%`]}
+                            />
+                            <Bar dataKey="1D" fill={RETURN_PERIOD_COLORS[0]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="3D" fill={RETURN_PERIOD_COLORS[1]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="5D" fill={RETURN_PERIOD_COLORS[2]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="10D" fill={RETURN_PERIOD_COLORS[3]} radius={[2, 2, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex justify-center gap-4 mt-3">
+                        {["1D", "3D", "5D", "10D"].map((label, i) => (
+                          <div key={label} className="flex items-center gap-1.5">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: RETURN_PERIOD_COLORS[i] }} />
+                            <span className="text-xs text-muted-foreground">{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Section D — Signal Accuracy Trend */}
+                {perfAnalytics.accuracyTrend.length > 1 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Signal Accuracy Trend</CardTitle>
+                      <CardDescription>
+                        Weekly win rate for BUY/STRONG_BUY signals — is the strategy improving?
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={perfAnalytics.accuracyTrend}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <XAxis
+                              dataKey="weekStart"
+                              stroke="#94a3b8"
+                              fontSize={10}
+                              tickFormatter={(v) =>
+                                new Date(v).toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                })
+                              }
+                            />
+                            <YAxis stroke="#94a3b8" fontSize={12} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip
+                              {...CHART_TOOLTIP_STYLE}
+                              formatter={(value) => [`${Number(value ?? 0).toFixed(1)}%`, "Win Rate"]}
+                              labelFormatter={(v) =>
+                                `Week of ${new Date(v).toLocaleDateString("en-IN")}`
+                              }
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="winRate"
+                              stroke="#3b82f6"
+                              strokeWidth={2}
+                              dot={{ r: 4, fill: "#3b82f6" }}
+                              activeDot={{ r: 6 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Section E — Best & Worst Signals */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Best Signals */}
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-green-500" />
+                        Best Signals
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {perfAnalytics.bestSignals.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Stock</th>
+                                <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Signal</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Score</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Entry</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Return</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {perfAnalytics.bestSignals.map((s) => {
+                                const bestPrice = s.priceAfter10d ?? s.priceAfter5d ?? s.priceAfter3d ?? s.priceAfter1d;
+                                const ret = bestPrice && s.entryPrice > 0
+                                  ? ((bestPrice - s.entryPrice) / s.entryPrice) * 100
+                                  : null;
+                                return (
+                                  <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30">
+                                    <td className="py-2 px-2">
+                                      <div className="font-semibold text-sm">{s.symbol}</div>
+                                      <div className="text-[10px] text-muted-foreground">{s.sector}</div>
+                                    </td>
+                                    <td className="text-center py-2 px-2">
+                                      <Badge variant={s.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
+                                        {s.signal.replace("_", " ")}
+                                      </Badge>
+                                    </td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{s.score}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{formatCurrency(s.entryPrice)}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm text-green-500">
+                                      {ret !== null ? `+${ret.toFixed(1)}%` : "—"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Worst Signals */}
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500" />
+                        Worst Signals
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {perfAnalytics.worstSignals.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Stock</th>
+                                <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Signal</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Score</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Entry</th>
+                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Return</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {perfAnalytics.worstSignals.map((s) => {
+                                const bestPrice = s.priceAfter10d ?? s.priceAfter5d ?? s.priceAfter3d ?? s.priceAfter1d;
+                                const ret = bestPrice && s.entryPrice > 0
+                                  ? ((bestPrice - s.entryPrice) / s.entryPrice) * 100
+                                  : null;
+                                return (
+                                  <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30">
+                                    <td className="py-2 px-2">
+                                      <div className="font-semibold text-sm">{s.symbol}</div>
+                                      <div className="text-[10px] text-muted-foreground">{s.sector}</div>
+                                    </td>
+                                    <td className="text-center py-2 px-2">
+                                      <Badge variant={s.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
+                                        {s.signal.replace("_", " ")}
+                                      </Badge>
+                                    </td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{s.score}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{formatCurrency(s.entryPrice)}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm text-red-500">
+                                      {ret !== null ? `${ret.toFixed(1)}%` : "—"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>

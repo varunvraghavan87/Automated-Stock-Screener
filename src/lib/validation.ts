@@ -92,3 +92,9 @@ export const ScreenerConfigSchema = z.object({
 export const MAX_OPEN_TRADES = 100;
 export const MAX_WATCHLIST_ITEMS = 200;
 export const MAX_PRICE_UPDATE_SYMBOLS = 500;
+
+// ─── Snapshot Limits ────────────────────────────────────────────────────
+
+export const MAX_SNAPSHOTS_PER_USER = 270;    // ~90 days * 3 runs/day
+export const MAX_SIGNALS_PER_SNAPSHOT = 50;
+export const SNAPSHOT_RETENTION_DAYS = 90;

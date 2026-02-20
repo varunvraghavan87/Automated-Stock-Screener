@@ -1,6 +1,6 @@
 // Helper functions for mapping between Supabase snake_case rows and camelCase TypeScript types
 
-import type { PaperTrade, WatchlistItem } from "@/lib/types";
+import type { PaperTrade, WatchlistItem, ScreenerSnapshot, SignalSnapshot } from "@/lib/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,5 +50,42 @@ export function mapWatchlistRow(row: any): WatchlistItem {
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function mapScreenerSnapshotRow(row: any): ScreenerSnapshot {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    runDate: row.run_date,
+    mode: row.mode,
+    marketRegime: row.market_regime,
+    totalScanned: row.total_scanned,
+    resultsSummary: row.results_summary,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapSignalSnapshotRow(row: any): SignalSnapshot {
+  return {
+    id: row.id,
+    snapshotId: row.snapshot_id,
+    userId: row.user_id,
+    symbol: row.symbol,
+    exchange: row.exchange,
+    name: row.name,
+    sector: row.sector,
+    signal: row.signal,
+    score: Number(row.score),
+    entryPrice: Number(row.entry_price),
+    stopLoss: Number(row.stop_loss),
+    targetPrice: Number(row.target_price),
+    riskReward: Number(row.risk_reward),
+    priceAfter1d: row.price_after_1d ? Number(row.price_after_1d) : null,
+    priceAfter3d: row.price_after_3d ? Number(row.price_after_3d) : null,
+    priceAfter5d: row.price_after_5d ? Number(row.price_after_5d) : null,
+    priceAfter10d: row.price_after_10d ? Number(row.price_after_10d) : null,
+    outcome: row.outcome,
+    createdAt: row.created_at,
   };
 }

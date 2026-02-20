@@ -422,6 +422,101 @@ export interface PortfolioAnalytics {
   monthlyReturns: MonthlyReturn[];
 }
 
+// ---- Screener Snapshot Types ----
+
+export interface ScreenerSnapshot {
+  id: string;
+  userId: string;
+  runDate: string;
+  mode: "live" | "demo";
+  marketRegime: MarketRegime;
+  totalScanned: number;
+  resultsSummary: ScreenerResultsSummary;
+  createdAt: string;
+}
+
+export interface ScreenerResultsSummary {
+  signalCounts: Record<string, number>;
+  topStocks: SnapshotTopStock[];
+}
+
+export interface SnapshotTopStock {
+  symbol: string;
+  signal: string;
+  score: number;
+  entryPrice: number;
+}
+
+export interface SignalSnapshot {
+  id: string;
+  snapshotId: string;
+  userId: string;
+  symbol: string;
+  exchange: string;
+  name: string;
+  sector: string;
+  signal: "STRONG_BUY" | "BUY" | "WATCH" | "NEUTRAL" | "AVOID";
+  score: number;
+  entryPrice: number;
+  stopLoss: number;
+  targetPrice: number;
+  riskReward: number;
+  priceAfter1d: number | null;
+  priceAfter3d: number | null;
+  priceAfter5d: number | null;
+  priceAfter10d: number | null;
+  outcome: "target_hit" | "stopped_out" | "expired" | "pending" | null;
+  createdAt: string;
+}
+
+// ---- Signal Performance Analytics Types ----
+
+export interface SignalPerformanceAnalytics {
+  totalSignals: number;
+  totalSnapshots: number;
+  dateRange: { from: string; to: string } | null;
+  winRateBySignal: SignalWinRate[];
+  avgReturnByPeriod: AvgReturnByPeriod[];
+  bestSignals: SignalSnapshot[];
+  worstSignals: SignalSnapshot[];
+  hitRate: HitRateStats;
+  accuracyTrend: AccuracyTrendPoint[];
+}
+
+export interface SignalWinRate {
+  signal: string;
+  total: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  expired: number;
+  winRate: number;
+}
+
+export interface AvgReturnByPeriod {
+  signal: string;
+  avgReturn1d: number | null;
+  avgReturn3d: number | null;
+  avgReturn5d: number | null;
+  avgReturn10d: number | null;
+}
+
+export interface HitRateStats {
+  targetHit: number;
+  stoppedOut: number;
+  expired: number;
+  pending: number;
+  targetHitPct: number;
+  stoppedOutPct: number;
+  expiredPct: number;
+}
+
+export interface AccuracyTrendPoint {
+  weekStart: string;
+  winRate: number;
+  signalCount: number;
+}
+
 // ---- Watchlist Types ----
 
 export interface WatchlistItem {

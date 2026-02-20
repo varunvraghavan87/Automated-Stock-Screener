@@ -52,3 +52,19 @@ export function getMarketStatus(): {
   }
   return { isOpen: false, label: "Weekend" };
 }
+
+/**
+ * Count approximate trading days between two dates (excludes weekends).
+ * Does not account for Indian market holidays — minor ~1 day shift.
+ */
+export function countTradingDays(from: Date, to: Date): number {
+  let count = 0;
+  const current = new Date(from);
+  current.setDate(current.getDate() + 1); // start counting from the next day
+  while (current <= to) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) count++;
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+}
