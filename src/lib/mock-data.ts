@@ -1,4 +1,30 @@
-import type { StockData, TechnicalIndicators } from "./types";
+import type { StockData, TechnicalIndicators, WeeklyTrendHealth } from "./types";
+
+// Weekly trend presets for mock data
+const WEEKLY_ALIGNED: WeeklyTrendHealth = {
+  closeAboveEMA20: true, rsiAbove40: true, macdHistPositive: true,
+  weeklyEMA20: 0, weeklyRSI: 58, weeklyMACDHist: 2.5, weeklyClose: 0,
+  aligned: true, score: 5, status: 'aligned',
+};
+const WEEKLY_MIXED: WeeklyTrendHealth = {
+  closeAboveEMA20: true, rsiAbove40: true, macdHistPositive: false,
+  weeklyEMA20: 0, weeklyRSI: 52, weeklyMACDHist: -0.5, weeklyClose: 0,
+  aligned: false, score: 0, status: 'mixed',
+};
+const WEEKLY_COUNTER: WeeklyTrendHealth = {
+  closeAboveEMA20: false, rsiAbove40: false, macdHistPositive: false,
+  weeklyEMA20: 0, weeklyRSI: 35, weeklyMACDHist: -3.0, weeklyClose: 0,
+  aligned: false, score: -10, status: 'counter-trend',
+};
+
+// Helper to create weekly trend with specific close/EMA values
+function makeWeekly(
+  base: WeeklyTrendHealth,
+  weeklyClose: number,
+  weeklyEMA20: number
+): WeeklyTrendHealth {
+  return { ...base, weeklyClose, weeklyEMA20 };
+}
 
 // Realistic mock data for Indian equities that match various screener outcomes
 export const MOCK_STOCKS: Array<{
@@ -41,6 +67,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 141.2, sarTrend: "up",
       ichimokuTenkan: 144.0, ichimokuKijun: 142.0,
       ichimokuSenkouA: 143.0, ichimokuSenkouB: 139.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 145.2, 140.0),
     },
   },
   {
@@ -78,6 +105,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 1665.0, sarTrend: "up",
       ichimokuTenkan: 1680.0, ichimokuKijun: 1665.0,
       ichimokuSenkouA: 1672.0, ichimokuSenkouB: 1650.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1685.0, 1640.0),
     },
   },
   {
@@ -115,6 +143,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 2650.0, sarTrend: "up",
       ichimokuTenkan: 2678.0, ichimokuKijun: 2660.0,
       ichimokuSenkouA: 2669.0, ichimokuSenkouB: 2640.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 2685.0, 2610.0),
     },
   },
   // BUY candidates - good but not perfect
@@ -153,6 +182,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 1498.0, sarTrend: "up",
       ichimokuTenkan: 1515.0, ichimokuKijun: 1500.0,
       ichimokuSenkouA: 1507.0, ichimokuSenkouB: 1490.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1520.0, 1475.0),
     },
   },
   {
@@ -190,6 +220,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 7720.0, sarTrend: "up",
       ichimokuTenkan: 7835.0, ichimokuKijun: 7760.0,
       ichimokuSenkouA: 7797.0, ichimokuSenkouB: 7700.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_MIXED, 7850.0, 7700.0),
     },
   },
   {
@@ -227,6 +258,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 3880.0, sarTrend: "up",
       ichimokuTenkan: 3915.0, ichimokuKijun: 3890.0,
       ichimokuSenkouA: 3902.0, ichimokuSenkouB: 3870.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3920.0, 3850.0),
     },
   },
   // WATCH candidates - trend established but no pullback yet
@@ -265,6 +297,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 1095.0, sarTrend: "up",
       ichimokuTenkan: 1115.0, ichimokuKijun: 1100.0,
       ichimokuSenkouA: 1107.0, ichimokuSenkouB: 1085.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_MIXED, 1125.0, 1090.0),
     },
   },
   {
@@ -302,6 +335,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 1545.0, sarTrend: "up",
       ichimokuTenkan: 1570.0, ichimokuKijun: 1550.0,
       ichimokuSenkouA: 1560.0, ichimokuSenkouB: 1530.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1580.0, 1520.0),
     },
   },
   // NEUTRAL - passes Phase 1 but fails Phase 2
@@ -340,6 +374,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 692.0, sarTrend: "down",
       ichimokuTenkan: 682.0, ichimokuKijun: 688.0,
       ichimokuSenkouA: 685.0, ichimokuSenkouB: 690.0, ichimokuCloudSignal: "below",
+      weeklyTrend: makeWeekly(WEEKLY_COUNTER, 680.0, 695.0),
     },
   },
   {
@@ -377,6 +412,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 493.0, sarTrend: "down",
       ichimokuTenkan: 486.0, ichimokuKijun: 490.0,
       ichimokuSenkouA: 488.0, ichimokuSenkouB: 492.0, ichimokuCloudSignal: "below",
+      weeklyTrend: makeWeekly(WEEKLY_COUNTER, 485.0, 495.0),
     },
   },
   // More BUY/STRONG BUY candidates
@@ -415,6 +451,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 3680.0, sarTrend: "up",
       ichimokuTenkan: 3710.0, ichimokuKijun: 3685.0,
       ichimokuSenkouA: 3697.0, ichimokuSenkouB: 3670.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3720.0, 3630.0),
     },
   },
   {
@@ -452,6 +489,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 1685.0, sarTrend: "up",
       ichimokuTenkan: 1705.0, ichimokuKijun: 1690.0,
       ichimokuSenkouA: 1697.0, ichimokuSenkouB: 1680.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 1710.0, 1660.0),
     },
   },
   {
@@ -489,6 +527,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 12280.0, sarTrend: "up",
       ichimokuTenkan: 12420.0, ichimokuKijun: 12320.0,
       ichimokuSenkouA: 12370.0, ichimokuSenkouB: 12250.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 12450.0, 12100.0),
     },
   },
   {
@@ -526,6 +565,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 3480.0, sarTrend: "up",
       ichimokuTenkan: 3515.0, ichimokuKijun: 3490.0,
       ichimokuSenkouA: 3502.0, ichimokuSenkouB: 3470.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 3520.0, 3440.0),
     },
   },
   {
@@ -563,6 +603,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 2355.0, sarTrend: "up",
       ichimokuTenkan: 2375.0, ichimokuKijun: 2360.0,
       ichimokuSenkouA: 2367.0, ichimokuSenkouB: 2350.0, ichimokuCloudSignal: "above",
+      weeklyTrend: makeWeekly(WEEKLY_ALIGNED, 2380.0, 2330.0),
     },
   },
   // AVOID candidates - fails Phase 1
@@ -601,6 +642,7 @@ export const MOCK_STOCKS: Array<{
       parabolicSAR: 133.0, sarTrend: "down",
       ichimokuTenkan: 127.0, ichimokuKijun: 132.0,
       ichimokuSenkouA: 129.5, ichimokuSenkouB: 135.0, ichimokuCloudSignal: "below",
+      weeklyTrend: makeWeekly(WEEKLY_COUNTER, 125.0, 135.0),
     },
   },
 ];

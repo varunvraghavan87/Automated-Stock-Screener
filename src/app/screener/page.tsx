@@ -665,6 +665,7 @@ function StockRow({
                         `EMA Alignment: ${result.stock.lastPrice > result.indicators.ema20 && result.indicators.ema20 > result.indicators.ema50 ? "Yes" : "No"}`,
                         `ADX(14): ${result.indicators.adx14.toFixed(1)} (Min: 25)`,
                         `3M Relative Strength: ${result.indicators.relativeStrength3M > 0 ? "+" : ""}${result.indicators.relativeStrength3M.toFixed(1)}%`,
+                        `Weekly Trend: ${result.phase2WeeklyTrend.status} (${result.phase2WeeklyTrend.score > 0 ? "+" : ""}${result.phase2WeeklyTrend.score} pts) — Close ${result.phase2WeeklyTrend.closeAboveEMA20 ? ">" : "<"} EMA20, RSI ${result.phase2WeeklyTrend.weeklyRSI.toFixed(1)}, MACD Hist ${result.phase2WeeklyTrend.macdHistPositive ? "+" : "-"}`,
                       ]}
                     />
                     <PhaseResult
@@ -853,6 +854,23 @@ function StockRow({
                   label="Parabolic SAR"
                   value={result.indicators.sarTrend.toUpperCase()}
                   status={result.indicators.sarTrend === "up" ? "good" : "bad"}
+                />
+                {/* Weekly Timeframe */}
+                <IndicatorCard
+                  label="Weekly Trend"
+                  value={result.phase2WeeklyTrend.status.toUpperCase()}
+                  status={
+                    result.phase2WeeklyTrend.status === "aligned"
+                      ? "good"
+                      : result.phase2WeeklyTrend.status === "counter-trend"
+                        ? "bad"
+                        : "neutral"
+                  }
+                />
+                <IndicatorCard
+                  label="Weekly RSI"
+                  value={result.phase2WeeklyTrend.weeklyRSI.toFixed(1)}
+                  status={result.phase2WeeklyTrend.rsiAbove40 ? "good" : "bad"}
                 />
               </div>
             </TabsContent>

@@ -725,6 +725,82 @@ export function calculateVROC(
 }
 
 // ============================================================
+// Daily → Weekly Candle Aggregation
+// ============================================================
+export interface WeeklyCandle {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  weekStart: string; // ISO date of Monday
+}
+
+/**
+ * Aggregate daily OHLCV candles into weekly candles.
+ * Groups by ISO week (Monday–Friday). Partial weeks at boundaries are included.
+ *
+ * @param dailyCandles Array of { date, open, high, low, close, volume }
+ * @returns Array of weekly candles sorted chronologically
+ */
+export function aggregateDailyToWeekly(
+  dailyCandles: Array<{ date: string; open: number; high: number; low: number; close: number; volume: number }>
+): WeeklyCandle[] {
+  if (dailyCandles.length === 0) return [];
+
+  const weeks = new Map<string, {
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    firstDate: Date;
+  }>();
+
+  for (const candle of dailyCandles) {
+    const d = new Date(candle.date);
+    // Get Monday of this week (ISO week starts Monday)
+    const day = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diff = day === 0 ? -6 : 1 - day; // days to subtract to reach Monday
+    const monday = new Date(d);
+    monday.setDate(monday.getDate() + diff);
+    const weekKey = monday.toISOString().split("T")[0];
+
+    const existing = weeks.get(weekKey);
+    if (!existing) {
+      weeks.set(weekKey, {
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+        firstDate: d,
+      });
+    } else {
+      // Update: high = max, low = min, close = latest, volume = sum
+      existing.high = Math.max(existing.high, candle.high);
+      existing.low = Math.min(existing.low, candle.low);
+      existing.close = candle.close; // Latest day's close becomes weekly close
+      existing.volume += candle.volume;
+    }
+  }
+
+  // Sort by week start date and convert to WeeklyCandle[]
+  const sorted = Array.from(weeks.entries()).sort(
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  return sorted.map(([weekStart, data]) => ({
+    open: data.open,
+    high: data.high,
+    low: data.low,
+    close: data.close,
+    volume: data.volume,
+    weekStart,
+  }));
+}
+
+// ============================================================
 // Accumulation/Distribution Line
 // ============================================================
 export function calculateADLine(

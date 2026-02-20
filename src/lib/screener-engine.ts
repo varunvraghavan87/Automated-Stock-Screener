@@ -10,6 +10,7 @@ import {
   type MarketRegime,
   type MarketRegimeInfo,
   type AdaptiveThresholds,
+  type WeeklyTrendHealth,
   DEFAULT_SCREENER_CONFIG,
 } from "./types";
 
@@ -382,12 +383,15 @@ function calculateScore(
   // Phase 1: Liquidity (15 pts)
   if (phase1) score += 15;
 
-  // Phase 2: Trend (20 pts)
+  // Phase 2: Trend (20 pts base + weekly trend bonus/penalty)
   if (phase2) score += 10;
   if (indicators.macdLine > indicators.macdSignal && indicators.macdLine > 0) score += 3;
   if (indicators.superTrendDirection === "up") score += 3;
   if (indicators.sarTrend === "up") score += 2;
   if (indicators.ichimokuCloudSignal === "above") score += 2;
+
+  // Multi-Timeframe Confirmation: weekly trend score (+5 aligned, -10 counter-trend, 0 mixed)
+  score += indicators.weeklyTrend.score;
 
   // Phase 3: Momentum (25 pts max)
   if (phase3.pullbackToEMA) score += 5;
@@ -416,7 +420,7 @@ function calculateScore(
   if (indicators.adx14 > 35) score += 3;
   if (indicators.relativeStrength3M > 5) score += 2;
 
-  return Math.min(score, 100);
+  return Math.max(0, Math.min(score, 100));
 }
 
 function determineSignal(
@@ -455,6 +459,15 @@ function generateRationale(
   if (indicators.superTrendDirection === "up") {
     parts.push("SuperTrend green");
   }
+
+  // Weekly trend confirmation
+  const wt = indicators.weeklyTrend;
+  const wtLabels: Record<string, string> = {
+    aligned: `Weekly trend aligned (RSI ${wt.weeklyRSI.toFixed(1)}, close > EMA20) — +5 pts`,
+    'counter-trend': `CAUTION: Weekly trend counter-trend (RSI ${wt.weeklyRSI.toFixed(1)}, close ${wt.closeAboveEMA20 ? '>' : '<'} EMA20) — -10 pts`,
+    mixed: `Weekly trend mixed (RSI ${wt.weeklyRSI.toFixed(1)})`,
+  };
+  parts.push(wtLabels[wt.status]);
 
   // Momentum signals
   if (phase3.pullbackToEMA) {
@@ -542,6 +555,7 @@ export function runScreener(
       indicators,
       phase1Pass: p1,
       phase2Pass: p2,
+      phase2WeeklyTrend: indicators.weeklyTrend,
       phase3Pass: p3,
       phase3Details: p3Details,
       phase4VolumePass: p4Vol,

@@ -82,6 +82,23 @@ export interface TechnicalIndicators {
   ichimokuSenkouA: number;
   ichimokuSenkouB: number;
   ichimokuCloudSignal: "above" | "below" | "inside";
+
+  // Weekly Timeframe Indicators (aggregated from daily data)
+  weeklyTrend: WeeklyTrendHealth;
+}
+
+// Weekly Trend Health — computed from aggregated daily→weekly candles
+export interface WeeklyTrendHealth {
+  closeAboveEMA20: boolean;     // Weekly close > Weekly EMA20 (higher TF uptrend)
+  rsiAbove40: boolean;          // Weekly RSI > 40 (not in weekly downtrend)
+  macdHistPositive: boolean;    // Weekly MACD histogram > 0 or turning positive
+  weeklyEMA20: number;          // Actual value for display
+  weeklyRSI: number;            // Actual value for display
+  weeklyMACDHist: number;       // Actual value for display
+  weeklyClose: number;          // Latest weekly close for display
+  aligned: boolean;             // true if daily trend direction matches weekly
+  score: number;                // +5 (aligned) or -10 (counter-trend) or 0 (mixed)
+  status: 'aligned' | 'counter-trend' | 'mixed'; // Human-readable status
 }
 
 // ---- Market Regime Types ----
@@ -115,6 +132,7 @@ export interface ScreenerResult {
   indicators: TechnicalIndicators;
   phase1Pass: boolean;
   phase2Pass: boolean;
+  phase2WeeklyTrend: WeeklyTrendHealth; // Multi-timeframe confirmation data
   phase3Pass: boolean;
   phase3Details: Phase3Details;
   phase4VolumePass: boolean;

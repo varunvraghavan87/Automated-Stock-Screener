@@ -2,7 +2,7 @@
 // Fetches real-time + historical data and computes all technical indicators
 
 import { KiteAPI } from "./kite-api";
-import type { StockData, TechnicalIndicators, MarketRegimeInfo } from "./types";
+import type { StockData, TechnicalIndicators, MarketRegimeInfo, WeeklyTrendHealth } from "./types";
 import { detectMarketRegime } from "./screener-engine";
 import {
   calculateEMA,
@@ -23,6 +23,7 @@ import {
   calculateRelativeStrength,
   detectCandlestickPattern,
   calculateVROC,
+  aggregateDailyToWeekly,
 } from "./indicators";
 
 // Sector mapping for common NSE stocks (extend as needed)
@@ -370,6 +371,10 @@ export class LiveDataService {
     const weekClose = close.length >= 5 ? close[close.length - 6] : close[0];
     const weekChange = ((lastClose - weekClose) / weekClose) * 100;
 
+    // ---- Weekly Timeframe Indicators ----
+    // Aggregate daily candles into weekly candles, then compute weekly EMA20, RSI, MACD
+    const weeklyTrend = this.computeWeeklyTrend(history, lastClose);
+
     return {
       ema20: last(ema20),
       ema50: last(ema50),
@@ -409,6 +414,88 @@ export class LiveDataService {
       ichimokuSenkouA: !isNaN(senkouA) ? senkouA : 0,
       ichimokuSenkouB: !isNaN(senkouB) ? senkouB : 0,
       ichimokuCloudSignal,
+      weeklyTrend,
+    };
+  }
+
+  /**
+   * Compute weekly trend health from daily candles.
+   * Aggregates daily → weekly, then computes EMA20, RSI(14), MACD on weekly data.
+   */
+  private computeWeeklyTrend(
+    history: HistoricalCandle[],
+    dailyClose: number
+  ): WeeklyTrendHealth {
+    const weeklyCandles = aggregateDailyToWeekly(history);
+
+    // Need at least 26 weekly candles for MACD (26-period slow EMA)
+    if (weeklyCandles.length < 26) {
+      return {
+        closeAboveEMA20: false,
+        rsiAbove40: false,
+        macdHistPositive: false,
+        weeklyEMA20: 0,
+        weeklyRSI: 50,
+        weeklyMACDHist: 0,
+        weeklyClose: dailyClose,
+        aligned: false,
+        score: 0,
+        status: 'mixed',
+      };
+    }
+
+    const wClose = weeklyCandles.map((c) => c.close);
+    const latestWeeklyClose = wClose[wClose.length - 1];
+
+    // Weekly EMA20
+    const wEMA20Arr = calculateEMA(wClose, 20);
+    const weeklyEMA20 = wEMA20Arr.length > 0 ? wEMA20Arr[wEMA20Arr.length - 1] : latestWeeklyClose;
+
+    // Weekly RSI(14)
+    const wRSIArr = calculateRSI(wClose, 14);
+    const weeklyRSI = wRSIArr.length > 0 ? wRSIArr[wRSIArr.length - 1] : 50;
+
+    // Weekly MACD
+    const wMACD = calculateMACD(wClose, 12, 26, 9);
+    const weeklyMACDHist = wMACD.histogram.length > 0
+      ? wMACD.histogram[wMACD.histogram.length - 1]
+      : 0;
+
+    // Checks
+    const closeAboveEMA20 = latestWeeklyClose > weeklyEMA20;
+    const rsiAbove40 = weeklyRSI > 40;
+    const macdHistPositive = weeklyMACDHist > 0;
+
+    // Determine alignment
+    // Daily is considered bullish if dailyClose > daily EMA20 (we use the fact that phase2 checks this)
+    // For weekly, all 3 conditions met = aligned, 0 met = counter-trend, otherwise mixed
+    const bullishConditions = [closeAboveEMA20, rsiAbove40, macdHistPositive];
+    const passCount = bullishConditions.filter(Boolean).length;
+
+    let status: WeeklyTrendHealth['status'];
+    let score: number;
+    if (passCount >= 3) {
+      status = 'aligned';
+      score = 5; // Weekly trend confirms daily — bonus
+    } else if (passCount === 0) {
+      status = 'counter-trend';
+      score = -10; // Weekly bearish while daily may be bullish — penalty
+    } else {
+      status = 'mixed';
+      score = 0; // Neutral — some alignment but not full
+    }
+
+    return {
+      closeAboveEMA20,
+      rsiAbove40,
+      macdHistPositive,
+      weeklyEMA20,
+      weeklyRSI,
+      weeklyMACDHist,
+      weeklyClose: latestWeeklyClose,
+      aligned: status === 'aligned',
+      score,
+      status,
     };
   }
 

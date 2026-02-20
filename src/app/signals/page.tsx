@@ -131,6 +131,12 @@ export default function SignalsPage() {
         metric: "R:R Ratio",
         value: Math.min(pick.phase6.riskRewardRatio * 40, 100),
       },
+      {
+        metric: "Weekly Trend",
+        value:
+          pick.phase2WeeklyTrend.status === "aligned" ? 95 :
+          pick.phase2WeeklyTrend.status === "mixed" ? 50 : 10,
+      },
     ];
   }, [topPicks]);
 
