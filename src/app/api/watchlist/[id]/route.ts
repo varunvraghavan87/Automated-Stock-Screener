@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { mapWatchlistRow } from "@/lib/supabase/helpers";
+import { isValidUUID, WatchlistUpdateSchema } from "@/lib/validation";
 
 // PATCH /api/watchlist/[id] — Update watchlist item (targets, notes)
 export async function PATCH(
@@ -18,7 +19,17 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = await request.json();
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid item ID" }, { status: 400 });
+  }
+
+  let body;
+  try {
+    const raw = await request.json();
+    body = WatchlistUpdateSchema.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
 
   const updateData: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -37,7 +48,8 @@ export async function PATCH(
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to update watchlist item:", error);
+    return NextResponse.json({ error: "Failed to update item" }, { status: 500 });
   }
 
   if (!data) {
@@ -63,6 +75,9 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid item ID" }, { status: 400 });
+  }
 
   const { error } = await supabase
     .from("watchlist")
@@ -71,7 +86,8 @@ export async function DELETE(
     .eq("user_id", user.id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to delete watchlist item:", error);
+    return NextResponse.json({ error: "Failed to remove item" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

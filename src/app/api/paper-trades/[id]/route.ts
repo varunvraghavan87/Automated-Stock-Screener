@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { mapPaperTradeRow } from "@/lib/supabase/helpers";
+import { isValidUUID, PaperTradeUpdateSchema } from "@/lib/validation";
 
 // PATCH /api/paper-trades/[id] — Update a paper trade (notes, etc.)
 export async function PATCH(
@@ -18,9 +19,18 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = await request.json();
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid trade ID" }, { status: 400 });
+  }
 
-  // Only allow updating notes and target fields on open trades
+  let body;
+  try {
+    const raw = await request.json();
+    body = PaperTradeUpdateSchema.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
+
   const updateData: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -38,7 +48,8 @@ export async function PATCH(
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to update paper trade:", error);
+    return NextResponse.json({ error: "Failed to update trade" }, { status: 500 });
   }
 
   if (!data) {
@@ -64,6 +75,9 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid trade ID" }, { status: 400 });
+  }
 
   const { error } = await supabase
     .from("paper_trades")
@@ -72,7 +86,8 @@ export async function DELETE(
     .eq("user_id", user.id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to delete paper trade:", error);
+    return NextResponse.json({ error: "Failed to delete trade" }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

@@ -139,12 +139,12 @@ export default function ScreenerPage() {
                 <div>
                   <p className="text-sm font-medium">
                     {kiteStatus.connected
-                      ? `Connected to Kite (${kiteStatus.userId})`
+                      ? "Connected to Kite"
                       : "Kite Connect"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {kiteStatus.connected
-                      ? `Session active since ${new Date(kiteStatus.loginTime!).toLocaleTimeString("en-IN")} — expires at 6:00 AM IST`
+                      ? "Session active — expires at 6:00 AM IST"
                       : kiteStatus.configured
                         ? "Click Connect to authenticate with Zerodha"
                         : "Set KITE_API_KEY and KITE_API_SECRET env vars to enable"}

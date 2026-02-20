@@ -1,6 +1,18 @@
 // In-process async mutex for Kite API access.
 // Ensures screener refresh and price updates never run concurrently,
 // preventing Kite Connect API rate limit breaches.
+//
+// ⚠️  SERVERLESS LIMITATION: This lock uses module-level variables and only
+// works within a single Node.js process. On Vercel serverless, each request
+// MAY get a separate process, meaning concurrent requests from different
+// users could bypass this lock entirely. For production use with multiple
+// concurrent users, replace with a distributed lock using Vercel KV (Redis):
+//
+//   await kv.set("kite_lock", caller, { nx: true, ex: 300 }) → acquire
+//   await kv.del("kite_lock")                                 → release
+//
+// The current implementation is adequate for single-user or low-concurrency
+// scenarios where Vercel reuses the same serverless instance.
 
 let _locked = false;
 let _lockedBy: string | null = null;

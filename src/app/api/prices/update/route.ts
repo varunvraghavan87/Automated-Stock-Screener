@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/kite-session";
 import { KiteAPI } from "@/lib/kite-api";
 import { acquireKiteLock, releaseKiteLock } from "@/lib/kite-lock";
+import { MAX_PRICE_UPDATE_SYMBOLS } from "@/lib/validation";
 import type { PriceUpdateResult } from "@/lib/types";
 
 // POST /api/prices/update — Fetch live quotes and update paper_trades + watchlist
@@ -54,6 +55,14 @@ export async function POST() {
       prices: [],
       message: "No stocks to update",
     });
+  }
+
+  // Guard against exceeding Kite API symbol limit
+  if (allSymbols.length > MAX_PRICE_UPDATE_SYMBOLS) {
+    return NextResponse.json(
+      { error: `Too many symbols to update (${allSymbols.length}). Maximum is ${MAX_PRICE_UPDATE_SYMBOLS}.` },
+      { status: 400 }
+    );
   }
 
   // Acquire the Kite API lock (wait up to 60s for screener to finish)
@@ -126,10 +135,7 @@ export async function POST() {
   } catch (error) {
     console.error("Price update failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to fetch prices",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Failed to fetch prices" },
       { status: 502 }
     );
   } finally {

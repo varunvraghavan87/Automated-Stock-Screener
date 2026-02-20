@@ -1,4 +1,5 @@
 // GET /api/kite/status — Check if user has an active Kite session
+// NOTE: Does not expose userId or loginTime for security (prevents enumeration)
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/kite-session";
@@ -16,7 +17,5 @@ export async function GET() {
   return NextResponse.json({
     connected: true,
     configured: true,
-    userId: session.userId,
-    loginTime: session.loginTime,
   });
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { mapPaperTradeRow } from "@/lib/supabase/helpers";
-import type { PaperTradeInput } from "@/lib/types";
+import { PaperTradeInputSchema, MAX_OPEN_TRADES } from "@/lib/validation";
 
 // GET /api/paper-trades — List user's paper trades
 export async function GET(request: Request) {
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status"); // 'open', 'closed', or null for all
+  const status = searchParams.get("status");
 
   let query = supabase
     .from("paper_trades")
@@ -31,7 +31,8 @@ export async function GET(request: Request) {
   const { data, error } = await query;
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to fetch paper trades:", error);
+    return NextResponse.json({ error: "Failed to fetch trades" }, { status: 500 });
   }
 
   return NextResponse.json({
@@ -51,20 +52,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body: PaperTradeInput = await request.json();
-
-  // Validate required fields
-  if (!body.symbol || !body.name || !body.quantity || !body.entryPrice) {
+  // Parse and validate input with Zod
+  let body;
+  try {
+    const raw = await request.json();
+    body = PaperTradeInputSchema.parse(raw);
+  } catch {
     return NextResponse.json(
-      { error: "Missing required fields: symbol, name, quantity, entryPrice" },
+      { error: "Invalid input. Check quantity, price, and field formats." },
       { status: 400 }
     );
   }
 
-  if (body.quantity <= 0 || body.entryPrice <= 0) {
+  // Enforce record count limit
+  const { count, error: countError } = await supabase
+    .from("paper_trades")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "open");
+
+  if (countError) {
+    console.error("Failed to check trade count:", countError);
+    return NextResponse.json({ error: "Failed to create trade" }, { status: 500 });
+  }
+
+  if ((count || 0) >= MAX_OPEN_TRADES) {
     return NextResponse.json(
-      { error: "Quantity and entry price must be positive" },
-      { status: 400 }
+      { error: `Maximum of ${MAX_OPEN_TRADES} open trades allowed. Close some trades first.` },
+      { status: 409 }
     );
   }
 
@@ -73,16 +88,16 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       symbol: body.symbol,
-      exchange: body.exchange || "NSE",
+      exchange: body.exchange,
       name: body.name,
-      sector: body.sector || "Unknown",
+      sector: body.sector,
       quantity: body.quantity,
       entry_price: body.entryPrice,
       stop_loss: body.stopLoss || null,
       target_price: body.targetPrice || null,
       signal: body.signal || null,
       overall_score: body.overallScore || null,
-      current_price: body.entryPrice, // Initialize current price to entry price
+      current_price: body.entryPrice,
       last_price_update: new Date().toISOString(),
       notes: body.notes || null,
     })
@@ -90,7 +105,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Failed to create paper trade:", error);
+    return NextResponse.json({ error: "Failed to create trade" }, { status: 500 });
   }
 
   return NextResponse.json({ trade: mapPaperTradeRow(data) }, { status: 201 });

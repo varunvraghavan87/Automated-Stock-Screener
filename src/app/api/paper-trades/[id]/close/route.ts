@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { mapPaperTradeRow } from "@/lib/supabase/helpers";
-import type { PaperTradeCloseInput } from "@/lib/types";
+import { isValidUUID, PaperTradeCloseSchema } from "@/lib/validation";
 
 // POST /api/paper-trades/[id]/close — Close a paper trade
 export async function POST(
@@ -19,11 +19,17 @@ export async function POST(
   }
 
   const { id } = await params;
-  const body: PaperTradeCloseInput = await request.json();
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid trade ID" }, { status: 400 });
+  }
 
-  if (!body.exitPrice || body.exitPrice <= 0) {
+  let body;
+  try {
+    const raw = await request.json();
+    body = PaperTradeCloseSchema.parse(raw);
+  } catch {
     return NextResponse.json(
-      { error: "Exit price must be positive" },
+      { error: "Invalid input. Exit price must be a positive number." },
       { status: 400 }
     );
   }
@@ -54,7 +60,7 @@ export async function POST(
       status: "closed",
       exit_price: body.exitPrice,
       exit_date: new Date().toISOString(),
-      exit_reason: body.exitReason || "manual",
+      exit_reason: body.exitReason,
       realized_pnl: realizedPnl,
       current_price: body.exitPrice,
       last_price_update: new Date().toISOString(),
@@ -66,7 +72,8 @@ export async function POST(
     .single();
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    console.error("Failed to close paper trade:", updateError);
+    return NextResponse.json({ error: "Failed to close trade" }, { status: 500 });
   }
 
   return NextResponse.json({ trade: mapPaperTradeRow(updated) });

@@ -10,6 +10,7 @@ import {
   type ScreenerConfig,
   DEFAULT_SCREENER_CONFIG,
 } from "@/lib/types";
+import { ScreenerConfigSchema } from "@/lib/validation";
 
 // Extend serverless function timeout for live data fetching (500 stocks)
 // Vercel Pro: up to 300s. Hobby: up to 60s.
@@ -83,9 +84,23 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
+
+  // Validate config with Zod to prevent prototype pollution
+  let validatedConfig = {};
+  try {
+    if (body.config) {
+      validatedConfig = ScreenerConfigSchema.parse(body.config);
+    }
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid screener configuration" },
+      { status: 400 }
+    );
+  }
+
   const config: ScreenerConfig = {
     ...DEFAULT_SCREENER_CONFIG,
-    ...body.config,
+    ...validatedConfig,
   };
 
   const symbols = body.symbols || NIFTY_500_SYMBOLS;
@@ -118,12 +133,11 @@ export async function POST(request: Request) {
     } catch (error) {
       // If session auth failed, return error. If env var auth, fall back silently.
       if (session) {
+        console.error("Kite API connection failed:", error);
         releaseKiteLock();
         return NextResponse.json(
           {
-            error: "Kite API connection failed",
-            message: error instanceof Error ? error.message : "Unknown error",
-            fallback: "Try reconnecting to Kite",
+            error: "Kite API connection failed. Try reconnecting to Kite.",
           },
           { status: 502 }
         );
