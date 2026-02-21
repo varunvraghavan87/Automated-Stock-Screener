@@ -40,12 +40,14 @@ import {
   RefreshCw,
   Clock,
   BarChart3,
+  AlertTriangle,
 } from "lucide-react";
 import { usePaperTrade } from "@/contexts/PaperTradeContext";
 import { usePriceUpdate } from "@/contexts/PriceUpdateContext";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { CloseTradeDialog } from "@/components/trade-actions/CloseTradeDialog";
 import { computePortfolioAnalytics } from "@/lib/portfolio-analytics";
+import { computeRebalanceAlerts } from "@/lib/rebalancing";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import type { PaperTrade, DivergenceResult, MonthlyReturn } from "@/lib/types";
 
@@ -152,7 +154,7 @@ export default function PaperTradePage() {
   } = usePaperTrade();
 
   const { lastUpdate, updating, marketOpen, triggerUpdate } = usePriceUpdate();
-  const { results: screenerResults } = useScreenerData();
+  const { results: screenerResults, lastRefresh } = useScreenerData();
 
   // Build a map of symbols with bearish divergences (for warning badges on open trades)
   const bearishDivergenceMap = useMemo(() => {
@@ -164,6 +166,18 @@ export default function PaperTradePage() {
     }
     return map;
   }, [screenerResults]);
+
+  // Compute rebalancing alerts for open positions
+  const rebalanceResult = useMemo(
+    () =>
+      computeRebalanceAlerts(
+        openTrades,
+        screenerResults,
+        bearishDivergenceMap,
+        lastRefresh
+      ),
+    [openTrades, screenerResults, bearishDivergenceMap, lastRefresh]
+  );
 
   const [closingTrade, setClosingTrade] = useState<PaperTrade | null>(null);
 
@@ -328,6 +342,68 @@ export default function PaperTradePage() {
               </Card>
             ) : (
               <div className="space-y-2">
+                {/* Rebalancing Summary Alert */}
+                {rebalanceResult.summary.totalFlagged > 0 && (
+                  <Card
+                    className={`border ${
+                      rebalanceResult.summary.criticalCount > 0
+                        ? "border-red-500/40 bg-red-500/5"
+                        : "border-amber-500/40 bg-amber-500/5"
+                    }`}
+                  >
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle
+                            className={`w-4 h-4 ${
+                              rebalanceResult.summary.criticalCount > 0
+                                ? "text-red-500"
+                                : "text-amber-500"
+                            }`}
+                          />
+                          <span className="text-sm font-medium">
+                            {rebalanceResult.summary.totalFlagged} position
+                            {rebalanceResult.summary.totalFlagged !== 1
+                              ? "s"
+                              : ""}{" "}
+                            need
+                            {rebalanceResult.summary.totalFlagged === 1
+                              ? "s"
+                              : ""}{" "}
+                            attention
+                          </span>
+                          {rebalanceResult.summary.criticalCount > 0 && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px]"
+                            >
+                              {rebalanceResult.summary.criticalCount} Critical
+                            </Badge>
+                          )}
+                          {rebalanceResult.summary.warningCount > 0 && (
+                            <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/30">
+                              {rebalanceResult.summary.warningCount} Warning
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {rebalanceResult.summary.isStale ? (
+                            <span className="text-amber-400">
+                              Screener data is &gt;24h old — rebalance
+                              recommended
+                            </span>
+                          ) : (
+                            <span>
+                              Last screener:{" "}
+                              {rebalanceResult.summary.lastScreenerRun.toLocaleTimeString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Table header */}
                 <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-muted-foreground font-medium uppercase">
                   <div className="col-span-2">Symbol</div>
@@ -351,7 +427,16 @@ export default function PaperTradePage() {
                       : 0;
 
                   return (
-                    <Card key={trade.id} className="hover:border-primary/30 transition-colors">
+                    <Card
+                      key={trade.id}
+                      className={`hover:border-primary/30 transition-colors ${
+                        rebalanceResult.trades.get(trade.id)?.hasCritical
+                          ? "border-red-500/30"
+                          : rebalanceResult.trades.get(trade.id)?.hasWarning
+                            ? "border-amber-500/20"
+                            : ""
+                      }`}
+                    >
                       <CardContent className="py-3 px-4">
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <div className="col-span-12 md:col-span-2">
@@ -359,11 +444,43 @@ export default function PaperTradePage() {
                             <p className="text-xs text-muted-foreground truncate">
                               {trade.name}
                             </p>
-                            {bearishDivergenceMap.has(trade.symbol) && (
-                              <Badge variant="destructive" className="text-[10px] mt-0.5">
-                                Bearish Divergence
-                              </Badge>
-                            )}
+                            {/* Rebalancing & Exit Signal Badges */}
+                            {(() => {
+                              const tradeAlerts =
+                                rebalanceResult.trades.get(trade.id);
+                              if (
+                                !tradeAlerts ||
+                                tradeAlerts.flags.length === 0
+                              )
+                                return null;
+                              return (
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {tradeAlerts.flags.map((flag) => (
+                                    <Tooltip key={flag.type}>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          className={`text-[10px] ${
+                                            flag.severity === "critical"
+                                              ? "bg-red-500/15 text-red-400 border-red-500/30"
+                                              : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                          }`}
+                                        >
+                                          {flag.label}
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="bottom"
+                                        className="max-w-xs"
+                                      >
+                                        <p className="text-xs">
+                                          {flag.description}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="col-span-3 md:col-span-1 text-right font-mono">
                             {trade.quantity}

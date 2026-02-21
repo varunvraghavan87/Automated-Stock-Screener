@@ -726,3 +726,43 @@ export interface BacktestAnalytics {
   sectorPerformance: SectorSignalPerformance[];
   strategySummary: StrategySummaryText;
 }
+
+// ---- Rebalancing & Exit Signal Types (#7) ----
+
+export type RebalanceFlagType =
+  | "SIGNAL_DOWNGRADED"
+  | "BEARISH_DIVERGENCE"
+  | "TREND_BROKEN"
+  | "EXTENDED_HOLD"
+  | "STOP_LOSS_BREACHED";
+
+export type RebalanceSeverity = "critical" | "warning";
+
+export interface RebalanceFlag {
+  type: RebalanceFlagType;
+  severity: RebalanceSeverity;
+  label: string;
+  description: string;
+}
+
+export interface TradeRebalanceInfo {
+  tradeId: string;
+  symbol: string;
+  flags: RebalanceFlag[];
+  hasCritical: boolean;
+  hasWarning: boolean;
+}
+
+export interface RebalanceSummary {
+  totalFlagged: number;
+  criticalCount: number;
+  warningCount: number;
+  flagsByType: Record<RebalanceFlagType, number>;
+  lastScreenerRun: Date;
+  isStale: boolean;
+}
+
+export interface RebalanceResult {
+  trades: Map<string, TradeRebalanceInfo>;
+  summary: RebalanceSummary;
+}
