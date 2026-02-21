@@ -13,6 +13,11 @@ import type {
   AvgReturnByPeriod,
   HitRateStats,
   AccuracyTrendPoint,
+  ScoreTierPerformance,
+  SectorSignalPerformance,
+  StrategySummaryText,
+  BacktestAnalytics,
+  ConfidenceLevel,
 } from "./types";
 
 // ---- Internal Helpers ----
@@ -235,4 +240,210 @@ export function computeSignalPerformance(
     hitRate: computeHitRate(actionable),
     accuracyTrend: computeAccuracyTrend(actionable),
   };
+}
+
+// ---- Backtest / Strategy-Level Analytics (#8) ----
+
+const SCORE_TIERS = [
+  { tierLabel: "STRONG_BUY", tier: "STRONG_BUY (\u226575)", scoreMin: 75, scoreMax: 100 },
+  { tierLabel: "BUY", tier: "BUY (55\u201374)", scoreMin: 55, scoreMax: 74 },
+  { tierLabel: "WATCH", tier: "WATCH (35\u201354)", scoreMin: 35, scoreMax: 54 },
+  { tierLabel: "LOW", tier: "Below WATCH (<35)", scoreMin: 0, scoreMax: 34 },
+];
+
+/**
+ * Group signals by score tier and compute avg returns + win rate per tier.
+ * Uses fixed score boundaries (75/55/35) for consistent historical bucketing.
+ */
+export function computeScoreTierPerformance(
+  signals: SignalSnapshot[]
+): ScoreTierPerformance[] {
+  return SCORE_TIERS.map(({ tier, tierLabel, scoreMin, scoreMax }) => {
+    const bucket = signals.filter(
+      (s) => s.score >= scoreMin && s.score <= scoreMax
+    );
+    const r1d: number[] = [];
+    const r3d: number[] = [];
+    const r5d: number[] = [];
+    const r10d: number[] = [];
+    let wins = 0;
+    let losses = 0;
+
+    for (const s of bucket) {
+      if (s.priceAfter1d !== null)
+        r1d.push(computeReturn(s.entryPrice, s.priceAfter1d));
+      if (s.priceAfter3d !== null)
+        r3d.push(computeReturn(s.entryPrice, s.priceAfter3d));
+      if (s.priceAfter5d !== null)
+        r5d.push(computeReturn(s.entryPrice, s.priceAfter5d));
+      if (s.priceAfter10d !== null)
+        r10d.push(computeReturn(s.entryPrice, s.priceAfter10d));
+      if (s.outcome === "target_hit") wins++;
+      if (s.outcome === "stopped_out") losses++;
+    }
+
+    return {
+      tier,
+      tierLabel,
+      scoreMin,
+      scoreMax,
+      signalCount: bucket.length,
+      avgReturn1d: r1d.length > 0 ? mean(r1d) : null,
+      avgReturn3d: r3d.length > 0 ? mean(r3d) : null,
+      avgReturn5d: r5d.length > 0 ? mean(r5d) : null,
+      avgReturn10d: r10d.length > 0 ? mean(r10d) : null,
+      winRate: wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0,
+      wins,
+      losses,
+    };
+  });
+}
+
+/**
+ * Group signals by sector × signal type and compute avg 10d return + win rate.
+ * Sorted by avgReturn10d descending (best-performing combos first).
+ */
+export function computeSectorPerformance(
+  signals: SignalSnapshot[]
+): SectorSignalPerformance[] {
+  const groups = new Map<
+    string,
+    {
+      sector: string;
+      signal: string;
+      r10d: number[];
+      wins: number;
+      losses: number;
+      total: number;
+    }
+  >();
+
+  for (const s of signals) {
+    const sector = s.sector || "Unknown";
+    const key = `${sector}|${s.signal}`;
+    const g = groups.get(key) ?? {
+      sector,
+      signal: s.signal,
+      r10d: [],
+      wins: 0,
+      losses: 0,
+      total: 0,
+    };
+    g.total++;
+    if (s.priceAfter10d !== null)
+      g.r10d.push(computeReturn(s.entryPrice, s.priceAfter10d));
+    if (s.outcome === "target_hit") g.wins++;
+    if (s.outcome === "stopped_out") g.losses++;
+    groups.set(key, g);
+  }
+
+  return Array.from(groups.values())
+    .map((g) => ({
+      sector: g.sector,
+      signal: g.signal,
+      signalCount: g.total,
+      avgReturn10d: g.r10d.length > 0 ? mean(g.r10d) : null,
+      winRate:
+        g.wins + g.losses > 0 ? (g.wins / (g.wins + g.losses)) * 100 : 0,
+      wins: g.wins,
+      losses: g.losses,
+    }))
+    .sort((a, b) => (b.avgReturn10d ?? -999) - (a.avgReturn10d ?? -999));
+}
+
+/**
+ * Build natural-language strategy summary with verdict and confidence level.
+ */
+export function computeStrategySummary(
+  tierPerf: ScoreTierPerformance[],
+  sectorPerf: SectorSignalPerformance[],
+  totalSignals: number,
+  days: number
+): StrategySummaryText {
+  const totalResolved = tierPerf.reduce(
+    (s, t) => s + t.wins + t.losses,
+    0
+  );
+
+  const confidenceLevel: ConfidenceLevel =
+    totalResolved >= 30
+      ? "high"
+      : totalResolved >= 15
+        ? "moderate"
+        : totalResolved >= 5
+          ? "low"
+          : "insufficient";
+
+  const lines: string[] = [];
+  const activeTiers = tierPerf.filter((t) => t.signalCount > 0).length;
+  lines.push(
+    `Over the last ${days} days, ${totalSignals} signals were generated across ${activeTiers} active score tiers.`
+  );
+
+  const sbTier = tierPerf.find((t) => t.tierLabel === "STRONG_BUY");
+  if (sbTier && sbTier.signalCount > 0 && sbTier.avgReturn10d !== null) {
+    lines.push(
+      `STRONG_BUY signals (score \u226575) averaged ${sbTier.avgReturn10d.toFixed(2)}% at 10 days with ${sbTier.winRate.toFixed(0)}% win rate (N=${sbTier.signalCount}).`
+    );
+  }
+
+  const buyTier = tierPerf.find((t) => t.tierLabel === "BUY");
+  if (buyTier && buyTier.signalCount > 0 && buyTier.avgReturn10d !== null) {
+    lines.push(
+      `BUY signals (score 55-74) averaged ${buyTier.avgReturn10d.toFixed(2)}% at 10 days with ${buyTier.winRate.toFixed(0)}% win rate (N=${buyTier.signalCount}).`
+    );
+  }
+
+  const bestSector = sectorPerf.find(
+    (s) => s.avgReturn10d !== null && s.signalCount >= 2
+  );
+  if (bestSector && bestSector.avgReturn10d !== null) {
+    lines.push(
+      `Best-performing sector: ${bestSector.sector} for ${bestSector.signal.replace("_", " ")} signals (${bestSector.avgReturn10d.toFixed(2)}% avg 10d return, N=${bestSector.signalCount}).`
+    );
+  }
+
+  lines.push(
+    `Confidence: ${confidenceLevel} (${totalResolved} resolved signals).`
+  );
+
+  const actionableTiers = tierPerf.filter(
+    (t) => t.tierLabel === "STRONG_BUY" || t.tierLabel === "BUY"
+  );
+  const bestActionableWinRate = Math.max(
+    ...actionableTiers.map((t) => t.winRate),
+    0
+  );
+
+  let overallVerdict: string;
+  if (totalResolved < 5) overallVerdict = "Needs more data";
+  else if (bestActionableWinRate > 60) overallVerdict = "Promising";
+  else if (bestActionableWinRate >= 40) overallVerdict = "Mixed";
+  else overallVerdict = "Underperforming";
+
+  return {
+    summaryLines: lines,
+    overallVerdict,
+    confidenceLevel,
+    totalResolvedSignals: totalResolved,
+  };
+}
+
+/**
+ * Orchestrator: compute all backtest analytics from signal snapshots.
+ * Called from the Signals page via useMemo alongside computeSignalPerformance.
+ */
+export function computeBacktestAnalytics(
+  signals: SignalSnapshot[],
+  days: number
+): BacktestAnalytics {
+  const scoreTierPerformance = computeScoreTierPerformance(signals);
+  const sectorPerformance = computeSectorPerformance(signals);
+  const strategySummary = computeStrategySummary(
+    scoreTierPerformance,
+    sectorPerformance,
+    signals.length,
+    days
+  );
+  return { scoreTierPerformance, sectorPerformance, strategySummary };
 }

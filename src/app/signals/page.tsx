@@ -51,8 +51,8 @@ import {
 import { generateHistoricalPrices } from "@/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
-import { computeSignalPerformance } from "@/lib/signal-performance";
-import type { SignalSnapshot, ScreenerSnapshot } from "@/lib/types";
+import { computeSignalPerformance, computeBacktestAnalytics } from "@/lib/signal-performance";
+import type { SignalSnapshot, ScreenerSnapshot, ConfidenceLevel } from "@/lib/types";
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8", "#ef4444"];
 const HIT_RATE_COLORS = ["#10b981", "#ef4444", "#f59e0b"]; // target hit, stopped out, expired
@@ -64,6 +64,17 @@ const CHART_TOOLTIP_STYLE = {
   },
 };
 const RETURN_PERIOD_COLORS = ["#94a3b8", "#3b82f6", "#8b5cf6", "#10b981"]; // 1d, 3d, 5d, 10d
+
+function ConfidenceBadge({ level }: { level: ConfidenceLevel }) {
+  const config = {
+    high: { label: "High Confidence", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+    moderate: { label: "Moderate Confidence", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+    low: { label: "Low Confidence", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+    insufficient: { label: "Insufficient Data", cls: "bg-red-500/15 text-red-400 border-red-500/30" },
+  };
+  const c = config[level];
+  return <Badge className={`text-[10px] ${c.cls}`}>{c.label}</Badge>;
+}
 
 export default function SignalsPage() {
   const { results, mode, loading, lastRefresh, marketRegime, sectorRankings, refresh } = useScreenerData();
@@ -120,6 +131,11 @@ export default function SignalsPage() {
       "10D": r.avgReturn10d ?? 0,
     }));
   }, [perfAnalytics]);
+
+  const backtestAnalytics = useMemo(
+    () => computeBacktestAnalytics(perfSignals, perfDays),
+    [perfSignals, perfDays]
+  );
 
   const signalDistribution = useMemo(() => {
     const dist: Record<string, number> = {
@@ -933,6 +949,51 @@ export default function SignalsPage() {
                   </Card>
                 </div>
 
+                {/* Section F — Strategy Summary (#8) */}
+                {backtestAnalytics.strategySummary.summaryLines.length > 0 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Target className="w-4 h-4" />
+                            Strategy Summary
+                          </CardTitle>
+                          <CardDescription>
+                            Backtesting preview based on historical signal outcomes
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <ConfidenceBadge level={backtestAnalytics.strategySummary.confidenceLevel} />
+                          <Badge
+                            className={`text-[10px] ${
+                              backtestAnalytics.strategySummary.overallVerdict === "Promising"
+                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                : backtestAnalytics.strategySummary.overallVerdict === "Mixed"
+                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                  : backtestAnalytics.strategySummary.overallVerdict === "Underperforming"
+                                    ? "bg-red-500/15 text-red-400 border-red-500/30"
+                                    : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                            }`}
+                          >
+                            {backtestAnalytics.strategySummary.overallVerdict}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2">
+                        {backtestAnalytics.strategySummary.summaryLines.map((line, i) => (
+                          <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <span className="text-primary mt-0.5">&#8226;</span>
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Section B — Win Rate by Signal + Hit Rate Donut */}
                 <div className="grid md:grid-cols-2 gap-6">
                   <Card className="bg-card/50 backdrop-blur border-border">
@@ -1059,6 +1120,96 @@ export default function SignalsPage() {
                   </Card>
                 )}
 
+                {/* Section G — Score-Tier Performance (#8) */}
+                {backtestAnalytics.scoreTierPerformance.filter((t) => t.signalCount > 0).length > 0 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Score-Tier Performance</CardTitle>
+                      <CardDescription>
+                        Average returns by score bucket &mdash; does a higher score mean better returns?
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64 mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={backtestAnalytics.scoreTierPerformance
+                              .filter((t) => t.signalCount > 0)
+                              .map((t) => ({
+                                tier: t.tierLabel,
+                                "1D": t.avgReturn1d ?? 0,
+                                "3D": t.avgReturn3d ?? 0,
+                                "5D": t.avgReturn5d ?? 0,
+                                "10D": t.avgReturn10d ?? 0,
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <XAxis dataKey="tier" stroke="#94a3b8" fontSize={11} />
+                            <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip
+                              {...CHART_TOOLTIP_STYLE}
+                              formatter={(value) => [`${Number(value ?? 0).toFixed(2)}%`]}
+                            />
+                            <Bar dataKey="1D" fill={RETURN_PERIOD_COLORS[0]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="3D" fill={RETURN_PERIOD_COLORS[1]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="5D" fill={RETURN_PERIOD_COLORS[2]} radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="10D" fill={RETURN_PERIOD_COLORS[3]} radius={[2, 2, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Tier</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Signals (N)</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Win Rate</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Avg 10D</th>
+                              <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Confidence</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {backtestAnalytics.scoreTierPerformance
+                              .filter((t) => t.signalCount > 0)
+                              .map((t) => {
+                                const resolved = t.wins + t.losses;
+                                const conf: ConfidenceLevel =
+                                  resolved >= 30 ? "high" : resolved >= 15 ? "moderate" : resolved >= 5 ? "low" : "insufficient";
+                                return (
+                                  <tr key={t.tierLabel} className="border-b border-border/50 hover:bg-secondary/30">
+                                    <td className="py-2 px-2 text-sm font-semibold">{t.tier}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{t.signalCount}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">
+                                      <span className={t.winRate >= 50 ? "text-green-500" : resolved === 0 ? "text-muted-foreground" : "text-red-500"}>
+                                        {resolved > 0 ? `${t.winRate.toFixed(1)}%` : "\u2014"}
+                                      </span>
+                                    </td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">
+                                      <span className={(t.avgReturn10d ?? 0) >= 0 ? "text-green-500" : "text-red-500"}>
+                                        {t.avgReturn10d !== null ? `${t.avgReturn10d.toFixed(2)}%` : "\u2014"}
+                                      </span>
+                                    </td>
+                                    <td className="text-center py-2 px-2">
+                                      <ConfidenceBadge level={conf} />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex justify-center gap-4 mt-3">
+                        {["1D", "3D", "5D", "10D"].map((label, i) => (
+                          <div key={label} className="flex items-center gap-1.5">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: RETURN_PERIOD_COLORS[i] }} />
+                            <span className="text-xs text-muted-foreground">{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Section D — Signal Accuracy Trend */}
                 {perfAnalytics.accuracyTrend.length > 1 && (
                   <Card className="bg-card/50 backdrop-blur border-border">
@@ -1102,6 +1253,76 @@ export default function SignalsPage() {
                             />
                           </LineChart>
                         </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Section H — Sector Performance Breakdown (#8) */}
+                {backtestAnalytics.sectorPerformance.filter((s) => s.signalCount >= 2).length > 0 && (
+                  <Card className="bg-card/50 backdrop-blur border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Sector Performance by Signal</CardTitle>
+                      <CardDescription>
+                        Which sectors performed best for each signal type (min. 2 signals)
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Sector</th>
+                              <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Signal</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">N</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Avg 10D Return</th>
+                              <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Win Rate</th>
+                              <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Confidence</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {backtestAnalytics.sectorPerformance
+                              .filter((s) => s.signalCount >= 2)
+                              .slice(0, 15)
+                              .map((s) => {
+                                const resolved = s.wins + s.losses;
+                                const conf: ConfidenceLevel =
+                                  resolved >= 30 ? "high" : resolved >= 15 ? "moderate" : resolved >= 5 ? "low" : "insufficient";
+                                return (
+                                  <tr key={`${s.sector}-${s.signal}`} className="border-b border-border/50 hover:bg-secondary/30">
+                                    <td className="py-2 px-2 text-sm">{s.sector}</td>
+                                    <td className="text-center py-2 px-2">
+                                      <Badge
+                                        className={`text-[10px] ${
+                                          s.signal === "STRONG_BUY"
+                                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                            : s.signal === "BUY"
+                                              ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                              : ""
+                                        }`}
+                                      >
+                                        {s.signal.replace("_", " ")}
+                                      </Badge>
+                                    </td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">{s.signalCount}</td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">
+                                      <span className={(s.avgReturn10d ?? 0) >= 0 ? "text-green-500" : "text-red-500"}>
+                                        {s.avgReturn10d !== null ? `${s.avgReturn10d.toFixed(2)}%` : "\u2014"}
+                                      </span>
+                                    </td>
+                                    <td className="text-right py-2 px-2 font-mono text-sm">
+                                      <span className={s.winRate >= 50 ? "text-green-500" : resolved === 0 ? "text-muted-foreground" : "text-red-500"}>
+                                        {resolved > 0 ? `${s.winRate.toFixed(1)}%` : "\u2014"}
+                                      </span>
+                                    </td>
+                                    <td className="text-center py-2 px-2">
+                                      <ConfidenceBadge level={conf} />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
                       </div>
                     </CardContent>
                   </Card>
