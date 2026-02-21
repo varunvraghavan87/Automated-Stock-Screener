@@ -29,6 +29,8 @@ import {
   WifiOff,
   RefreshCw,
   ShoppingCart,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency, formatPercent } from "@/lib/utils";
@@ -450,6 +452,11 @@ export default function DashboardPage() {
               "Avg Turnover > ₹20 Cr",
             ]}
             color="#3b82f6"
+            learnMore={{
+              description: "Ensures only liquid, actively-traded stocks enter the pipeline. Illiquid stocks cause slippage and unreliable indicators.",
+              indicators: ["Average Daily Turnover", "Market Capitalization"],
+              passCriteria: "Stock must have avg daily turnover ≥₹20 Cr to pass.",
+            }}
           />
           <FrameworkCard
             icon={TrendingUp}
@@ -461,6 +468,11 @@ export default function DashboardPage() {
               "MACD bullish above zero",
             ]}
             color="#10b981"
+            learnMore={{
+              description: "Confirms the stock is in a well-defined uptrend across multiple timeframes before looking for entries.",
+              indicators: ["EMA 20/50/200", "ADX(14)", "MACD", "SuperTrend", "Relative Strength 3M", "Weekly Trend"],
+              passCriteria: "EMA alignment + ADX ≥25 + positive 3-month relative strength vs Nifty.",
+            }}
           />
           <FrameworkCard
             icon={Zap}
@@ -472,6 +484,11 @@ export default function DashboardPage() {
               "ROC positive, +DI > -DI",
             ]}
             color="#f59e0b"
+            learnMore={{
+              description: "Identifies high-probability entry points within the established trend. Looks for pullbacks and momentum confirmation.",
+              indicators: ["RSI(14) tiered zones", "ROC(14)", "+DI/-DI", "Stochastic %K", "CCI(20)", "Williams %R", "Divergences"],
+              passCriteria: "At least 3 of 5 core conditions met: EMA pullback, RSI in zone, ROC positive, +DI > -DI, Stochastic bullish.",
+            }}
           />
           <FrameworkCard
             icon={Volume2}
@@ -483,6 +500,11 @@ export default function DashboardPage() {
               "MFI in 40-80 zone",
             ]}
             color="#8b5cf6"
+            learnMore={{
+              description: "Validates that real institutional money backs the momentum signal. Price moves without volume often fail.",
+              indicators: ["OBV trend", "Volume vs 20-day avg", "MFI(14)", "A/D Line", "3-bar volume acceleration"],
+              passCriteria: "At least 2 of 3: volume above average, MFI in healthy range, OBV trending up.",
+            }}
           />
           <FrameworkCard
             icon={Waves}
@@ -494,6 +516,11 @@ export default function DashboardPage() {
               "Price in upper band",
             ]}
             color="#ec4899"
+            learnMore={{
+              description: "Ensures risk is manageable and the stock is not too volatile for position sizing. Expanding Bollinger bands confirm breakout momentum.",
+              indicators: ["ATR(14) as % of price", "Bollinger Band width", "Bollinger %B"],
+              passCriteria: "ATR must be <5% of price. Bollinger bands expanding (bandwidth > 2%).",
+            }}
           />
           <FrameworkCard
             icon={Shield}
@@ -505,6 +532,11 @@ export default function DashboardPage() {
               "Max 8% capital risk",
             ]}
             color="#ef4444"
+            learnMore={{
+              description: "Sets precise entry, stop-loss, and target levels for execution. No trade should risk more than 2% of capital.",
+              indicators: ["ATR-based stop-loss (1.5x ATR)", "Risk:Reward ratio", "Position size calculator"],
+              passCriteria: "Minimum 2:1 reward-to-risk ratio. Maximum 8% of capital per position.",
+            }}
           />
         </div>
       </main>
@@ -687,13 +719,21 @@ function FrameworkCard({
   title,
   items,
   color,
+  learnMore,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   phase: number;
   title: string;
   items: string[];
   color: string;
+  learnMore?: {
+    description: string;
+    indicators: string[];
+    passCriteria: string;
+  };
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <Card className="bg-card/50 backdrop-blur border-border hover:border-primary/30 transition-colors">
       <CardContent className="p-5">
@@ -725,6 +765,51 @@ function FrameworkCard({
             </li>
           ))}
         </ul>
+
+        {learnMore && (
+          <>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 mt-3 text-xs font-medium transition-colors hover:text-foreground"
+              style={{ color }}
+            >
+              {expanded ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
+              {expanded ? "Less" : "Learn More"}
+            </button>
+
+            {expanded && (
+              <div className="mt-3 pt-3 border-t border-border space-y-2.5">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {learnMore.description}
+                </p>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
+                    Indicators Used
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {learnMore.indicators.map((ind) => (
+                      <Badge key={ind} variant="outline" className="text-[10px] px-1.5 py-0">
+                        {ind}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
+                    Pass Criteria
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {learnMore.passCriteria}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   );

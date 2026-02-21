@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   Zap,
   User,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { GlossaryDialog } from "@/components/glossary-dialog";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
@@ -38,6 +41,7 @@ export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -86,6 +90,15 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGlossaryOpen(true)}
+              className="text-muted-foreground hover:text-foreground"
+              title="Glossary & Quick Reference"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </Button>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20">
               <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
               <span className="text-xs text-accent font-mono">MARKET OPEN</span>
@@ -137,6 +150,8 @@ export function Navbar() {
           </div>
         </div>
       </div>
+
+      <GlossaryDialog open={glossaryOpen} onOpenChange={setGlossaryOpen} />
     </nav>
   );
 }
