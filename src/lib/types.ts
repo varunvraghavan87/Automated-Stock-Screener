@@ -766,3 +766,28 @@ export interface RebalanceResult {
   trades: Map<string, TradeRebalanceInfo>;
   summary: RebalanceSummary;
 }
+
+// ---- Portfolio Risk (Open Position) Types (#9) ----
+
+export interface SectorAllocation {
+  sector: string;
+  value: number;
+  percent: number;
+}
+
+export interface PortfolioRiskMetrics {
+  totalRiskAmount: number;
+  portfolioHeatPercent: number;
+  heatLevel: "low" | "moderate" | "high";
+  sectorAllocations: SectorAllocation[];
+  maxSectorPercent: number;
+  maxSectorName: string;
+  hasConcentrationWarning: boolean;
+  worstCaseLoss: number;
+  worstCaseLossPercent: number;
+  positionsWithoutSL: number;
+  totalPositions: number;
+  avgRiskReward: number | null;
+  positionsWithRR: number;
+  overallRiskLevel: "low" | "moderate" | "high";
+}

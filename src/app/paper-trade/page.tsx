@@ -28,6 +28,8 @@ import {
   Bar,
   Cell,
   ReferenceLine,
+  PieChart,
+  Pie,
 } from "recharts";
 import {
   LineChart,
@@ -41,12 +43,16 @@ import {
   Clock,
   BarChart3,
   AlertTriangle,
+  Shield,
 } from "lucide-react";
 import { usePaperTrade } from "@/contexts/PaperTradeContext";
 import { usePriceUpdate } from "@/contexts/PriceUpdateContext";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { CloseTradeDialog } from "@/components/trade-actions/CloseTradeDialog";
-import { computePortfolioAnalytics } from "@/lib/portfolio-analytics";
+import {
+  computePortfolioAnalytics,
+  computePortfolioRisk,
+} from "@/lib/portfolio-analytics";
 import { computeRebalanceAlerts } from "@/lib/rebalancing";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import type { PaperTrade, DivergenceResult, MonthlyReturn } from "@/lib/types";
@@ -64,6 +70,11 @@ const CHART_TOOLTIP_STYLE = {
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const SECTOR_COLORS = [
+  "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444",
+  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
 ];
 
 // ---- Monthly Returns Heatmap Component ----
@@ -189,6 +200,12 @@ export default function PaperTradePage() {
   const analytics = useMemo(
     () => computePortfolioAnalytics(closedTrades),
     [closedTrades]
+  );
+
+  // Portfolio risk — computed from open trades only
+  const riskMetrics = useMemo(
+    () => computePortfolioRisk(openTrades),
+    [openTrades]
   );
 
   return (
@@ -637,16 +654,289 @@ export default function PaperTradePage() {
 
           {/* ---- Analytics Tab ---- */}
           <TabsContent value="analytics" className="space-y-6 mt-4">
-            {closedTrades.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No closed trades to analyze</p>
-                  <p className="text-sm mt-1">
-                    Close some trades to see portfolio analytics
-                  </p>
+            {/* Portfolio Risk Section — renders from open trades, independent of closedTrades */}
+            {openTrades.length > 0 && (
+              <Card className="bg-card/50 backdrop-blur border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-primary" />
+                      <CardTitle className="text-lg">Portfolio Risk</CardTitle>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${
+                        riskMetrics.overallRiskLevel === "high"
+                          ? "border-red-500/50 text-red-400"
+                          : riskMetrics.overallRiskLevel === "moderate"
+                            ? "border-amber-500/50 text-amber-400"
+                            : "border-green-500/50 text-green-400"
+                      }`}
+                    >
+                      {riskMetrics.overallRiskLevel === "high"
+                        ? "High Risk"
+                        : riskMetrics.overallRiskLevel === "moderate"
+                          ? "Moderate Risk"
+                          : "Low Risk"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {/* Risk Metric Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Portfolio Heat
+                        </p>
+                        <p
+                          className={`text-xl font-bold font-mono ${
+                            riskMetrics.heatLevel === "high"
+                              ? "text-red-500"
+                              : riskMetrics.heatLevel === "moderate"
+                                ? "text-amber-400"
+                                : "text-green-500"
+                          }`}
+                        >
+                          {formatNumber(riskMetrics.portfolioHeatPercent, 1)}%
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {formatCurrency(riskMetrics.totalRiskAmount)} at risk
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Worst-Case Loss
+                        </p>
+                        <p className="text-xl font-bold font-mono text-red-500">
+                          {formatCurrency(riskMetrics.worstCaseLoss)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {formatNumber(riskMetrics.worstCaseLossPercent, 1)}% of
+                          capital
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Avg Risk:Reward
+                        </p>
+                        <p
+                          className={`text-xl font-bold font-mono ${
+                            (riskMetrics.avgRiskReward ?? 0) >= 2
+                              ? "text-green-500"
+                              : (riskMetrics.avgRiskReward ?? 0) >= 1
+                                ? "text-amber-400"
+                                : "text-red-500"
+                          }`}
+                        >
+                          {riskMetrics.avgRiskReward != null
+                            ? `1:${formatNumber(riskMetrics.avgRiskReward)}`
+                            : "N/A"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {riskMetrics.positionsWithRR} of{" "}
+                          {riskMetrics.totalPositions} positions
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Positions at Risk
+                        </p>
+                        <p
+                          className={`text-xl font-bold font-mono ${
+                            riskMetrics.positionsWithoutSL > 0
+                              ? "text-amber-400"
+                              : "text-green-500"
+                          }`}
+                        >
+                          {riskMetrics.positionsWithoutSL}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          without stop-loss
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Max Sector Exposure
+                        </p>
+                        <p
+                          className={`text-xl font-bold font-mono ${
+                            riskMetrics.hasConcentrationWarning
+                              ? "text-red-500"
+                              : "text-green-500"
+                          }`}
+                        >
+                          {formatNumber(riskMetrics.maxSectorPercent, 1)}%
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                          {riskMetrics.maxSectorName || "\u2014"}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Open Positions
+                        </p>
+                        <p className="text-xl font-bold font-mono text-muted-foreground">
+                          {riskMetrics.totalPositions}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          actively tracked
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Sector Donut + Risk Controls */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Sector Allocation Donut Chart */}
+                    <div>
+                      <p className="text-sm font-medium mb-3">
+                        Sector Allocation
+                      </p>
+                      {riskMetrics.sectorAllocations.length > 0 ? (
+                        <>
+                          <div className="h-48">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={riskMetrics.sectorAllocations.map(
+                                    (s) => ({
+                                      name: s.sector,
+                                      value: s.value,
+                                    })
+                                  )}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={50}
+                                  outerRadius={80}
+                                  paddingAngle={3}
+                                  dataKey="value"
+                                >
+                                  {riskMetrics.sectorAllocations.map((_, i) => (
+                                    <Cell
+                                      key={`sector-${i}`}
+                                      fill={
+                                        SECTOR_COLORS[
+                                          i % SECTOR_COLORS.length
+                                        ]
+                                      }
+                                    />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip
+                                  {...CHART_TOOLTIP_STYLE}
+                                  formatter={(value) => [
+                                    formatCurrency(Number(value ?? 0)),
+                                    "Value",
+                                  ]}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="flex flex-wrap justify-center gap-3 mt-2">
+                            {riskMetrics.sectorAllocations.map((s, i) => (
+                              <div
+                                key={s.sector}
+                                className="flex items-center gap-1.5"
+                              >
+                                <div
+                                  className="w-2.5 h-2.5 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      SECTOR_COLORS[
+                                        i % SECTOR_COLORS.length
+                                      ],
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {s.sector} ({formatNumber(s.percent, 0)}%)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No sector data
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Risk Checks */}
+                    <div>
+                      <p className="text-sm font-medium mb-3">Risk Checks</p>
+                      <div className="space-y-2">
+                        <RiskCheckItem
+                          label="Portfolio Heat"
+                          value={`${formatNumber(riskMetrics.portfolioHeatPercent, 1)}% of capital`}
+                          passed={riskMetrics.heatLevel !== "high"}
+                        />
+                        <RiskCheckItem
+                          label="Sector Concentration"
+                          value={
+                            riskMetrics.hasConcentrationWarning
+                              ? `${riskMetrics.maxSectorName} at ${formatNumber(riskMetrics.maxSectorPercent, 0)}%`
+                              : "Below 40% threshold"
+                          }
+                          passed={!riskMetrics.hasConcentrationWarning}
+                        />
+                        <RiskCheckItem
+                          label="Stop-Loss Coverage"
+                          value={
+                            riskMetrics.positionsWithoutSL === 0
+                              ? "All positions covered"
+                              : `${riskMetrics.positionsWithoutSL} position${riskMetrics.positionsWithoutSL !== 1 ? "s" : ""} exposed`
+                          }
+                          passed={riskMetrics.positionsWithoutSL === 0}
+                        />
+                        <RiskCheckItem
+                          label="Risk:Reward Ratio"
+                          value={
+                            riskMetrics.avgRiskReward != null
+                              ? `1:${formatNumber(riskMetrics.avgRiskReward)} avg`
+                              : "No data"
+                          }
+                          passed={(riskMetrics.avgRiskReward ?? 0) >= 2}
+                        />
+                        <RiskCheckItem
+                          label="Worst-Case Drawdown"
+                          value={`${formatNumber(riskMetrics.worstCaseLossPercent, 1)}% of capital`}
+                          passed={riskMetrics.worstCaseLossPercent <= 30}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
+            )}
+
+            {closedTrades.length === 0 ? (
+              openTrades.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No closed trades to analyze</p>
+                    <p className="text-sm mt-1">
+                      Close some trades to see portfolio analytics
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null
             ) : (
               <>
                 {/* Section A: Metric Cards */}
@@ -1072,6 +1362,34 @@ export default function PaperTradePage() {
           trade={closingTrade}
         />
       )}
+    </div>
+  );
+}
+
+// ---- Risk Check Item Component ----
+
+function RiskCheckItem({
+  label,
+  value,
+  passed,
+}: {
+  label: string;
+  value: string;
+  passed: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg bg-background/50 border border-border">
+      <div className="flex items-center gap-2">
+        <div
+          className={`w-2 h-2 rounded-full ${
+            passed ? "bg-accent" : "bg-destructive"
+          }`}
+        />
+        <span className="text-sm">{label}</span>
+      </div>
+      <Badge variant="outline" className="text-xs">
+        {value}
+      </Badge>
     </div>
   );
 }

@@ -11,11 +11,13 @@ import type {
   EquityCurvePoint,
   MonthlyReturn,
   WinRateByGroup,
+  PortfolioRiskMetrics,
+  SectorAllocation,
 } from "./types";
 
 // ---- Constants ----
 
-const INITIAL_CAPITAL = 100_000; // ₹1L starting equity for curve
+export const INITIAL_CAPITAL = 100_000; // ₹1L starting equity for curve
 const TRADING_DAYS_PER_YEAR = 252;
 const MIN_TRADES_FOR_RATIOS = 3;
 
@@ -331,5 +333,152 @@ export function computePortfolioAnalytics(
     winRateBySector,
     equityCurve,
     monthlyReturns,
+  };
+}
+
+// ---- Portfolio Risk Computation (Open Positions) ----
+
+/** Default assumed max loss percentage when a position has no stop-loss */
+const DEFAULT_MAX_LOSS_PERCENT = 0.2; // 20%
+
+/**
+ * Compute risk metrics for open positions.
+ * Pure function — no side effects.
+ *
+ * @param openTrades - Currently open paper trades
+ */
+export function computePortfolioRisk(
+  openTrades: PaperTrade[]
+): PortfolioRiskMetrics {
+  if (openTrades.length === 0) {
+    return {
+      totalRiskAmount: 0,
+      portfolioHeatPercent: 0,
+      heatLevel: "low",
+      sectorAllocations: [],
+      maxSectorPercent: 0,
+      maxSectorName: "",
+      hasConcentrationWarning: false,
+      worstCaseLoss: 0,
+      worstCaseLossPercent: 0,
+      positionsWithoutSL: 0,
+      totalPositions: 0,
+      avgRiskReward: null,
+      positionsWithRR: 0,
+      overallRiskLevel: "low",
+    };
+  }
+
+  // ---- Portfolio Heat ----
+  let totalRiskAmount = 0;
+  for (const trade of openTrades) {
+    if (trade.stopLoss != null) {
+      const riskPerShare = trade.entryPrice - trade.stopLoss;
+      if (riskPerShare > 0) {
+        totalRiskAmount += trade.quantity * riskPerShare;
+      }
+    }
+  }
+  const portfolioHeatPercent = (totalRiskAmount / INITIAL_CAPITAL) * 100;
+  const heatLevel: PortfolioRiskMetrics["heatLevel"] =
+    portfolioHeatPercent > 20
+      ? "high"
+      : portfolioHeatPercent >= 10
+        ? "moderate"
+        : "low";
+
+  // ---- Sector Concentration ----
+  const sectorValueMap = new Map<string, number>();
+  let totalPortfolioValue = 0;
+
+  for (const trade of openTrades) {
+    const currentPrice = trade.currentPrice ?? trade.entryPrice;
+    const posValue = trade.quantity * currentPrice;
+    totalPortfolioValue += posValue;
+    const sector = trade.sector || "Unknown";
+    sectorValueMap.set(sector, (sectorValueMap.get(sector) ?? 0) + posValue);
+  }
+
+  const sectorAllocations: SectorAllocation[] = Array.from(
+    sectorValueMap.entries()
+  )
+    .map(([sector, value]) => ({
+      sector,
+      value,
+      percent:
+        totalPortfolioValue > 0 ? (value / totalPortfolioValue) * 100 : 0,
+    }))
+    .sort((a, b) => b.percent - a.percent);
+
+  const maxSectorAlloc = sectorAllocations[0] ?? { sector: "", percent: 0 };
+  const hasConcentrationWarning = maxSectorAlloc.percent > 40;
+
+  // ---- Worst-Case Loss ----
+  let worstCaseLoss = 0;
+  for (const trade of openTrades) {
+    if (trade.stopLoss != null) {
+      const lossPerShare = trade.entryPrice - trade.stopLoss;
+      if (lossPerShare > 0) {
+        worstCaseLoss += trade.quantity * lossPerShare;
+      }
+    } else {
+      // No stop-loss: assume 20% of entry as max loss
+      worstCaseLoss +=
+        trade.quantity * trade.entryPrice * DEFAULT_MAX_LOSS_PERCENT;
+    }
+  }
+  const worstCaseLossPercent = (worstCaseLoss / INITIAL_CAPITAL) * 100;
+
+  // ---- Positions at Risk (no stop-loss) ----
+  const positionsWithoutSL = openTrades.filter(
+    (t) => t.stopLoss == null
+  ).length;
+
+  // ---- Average Risk:Reward ----
+  let weightedRR = 0;
+  let totalRRWeight = 0;
+  let positionsWithRR = 0;
+
+  for (const trade of openTrades) {
+    if (trade.stopLoss != null && trade.targetPrice != null) {
+      const risk = trade.entryPrice - trade.stopLoss;
+      const reward = trade.targetPrice - trade.entryPrice;
+      if (risk > 0 && reward > 0) {
+        const rr = reward / risk;
+        const posValue = trade.quantity * trade.entryPrice;
+        weightedRR += rr * posValue;
+        totalRRWeight += posValue;
+        positionsWithRR++;
+      }
+    }
+  }
+  const avgRiskReward = totalRRWeight > 0 ? weightedRR / totalRRWeight : null;
+
+  // ---- Overall Risk Level ----
+  let riskScore = 0;
+  if (heatLevel === "high") riskScore += 2;
+  else if (heatLevel === "moderate") riskScore += 1;
+  if (hasConcentrationWarning) riskScore += 1;
+  if (positionsWithoutSL > 0) riskScore += 1;
+  if (worstCaseLossPercent > 30) riskScore += 1;
+
+  const overallRiskLevel: PortfolioRiskMetrics["overallRiskLevel"] =
+    riskScore >= 3 ? "high" : riskScore >= 2 ? "moderate" : "low";
+
+  return {
+    totalRiskAmount,
+    portfolioHeatPercent,
+    heatLevel,
+    sectorAllocations,
+    maxSectorPercent: maxSectorAlloc.percent,
+    maxSectorName: maxSectorAlloc.sector,
+    hasConcentrationWarning,
+    worstCaseLoss,
+    worstCaseLossPercent,
+    positionsWithoutSL,
+    totalPositions: openTrades.length,
+    avgRiskReward,
+    positionsWithRR,
+    overallRiskLevel,
   };
 }
