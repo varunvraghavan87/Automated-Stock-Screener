@@ -43,7 +43,10 @@ import {
   type ScreenerResult,
   type MarketRegimeInfo,
   type AdaptiveThresholds,
+  type ScreenerStrategy,
   DEFAULT_SCREENER_CONFIG,
+  STRATEGY_LABELS,
+  STRATEGY_PRESETS,
 } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
@@ -52,6 +55,8 @@ import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
 
 export default function ScreenerPage() {
   const [config, setConfig] = useState<ScreenerConfig>(DEFAULT_SCREENER_CONFIG);
+  const [activeStrategy, setActiveStrategy] =
+    useState<ScreenerStrategy>("balanced");
   const [search, setSearch] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [signalFilter, setSignalFilter] = useState<string>("all");
@@ -190,6 +195,46 @@ export default function ScreenerPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Strategy Presets */}
+              <div className="mb-6">
+                <Label className="text-xs text-muted-foreground mb-2 block">
+                  Strategy Preset
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    Object.keys(STRATEGY_LABELS) as ScreenerStrategy[]
+                  ).map((key) => {
+                    const { name, description } = STRATEGY_LABELS[key];
+                    const isActive = activeStrategy === key;
+                    return (
+                      <Tooltip key={key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => {
+                              setActiveStrategy(key);
+                              setConfig({
+                                ...DEFAULT_SCREENER_CONFIG,
+                                ...STRATEGY_PRESETS[key],
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? "bg-primary/15 text-primary border border-primary/30"
+                                : "text-muted-foreground hover:text-foreground hover:bg-secondary border border-transparent"
+                            }`}
+                          >
+                            {name}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[240px]">
+                          <p className="text-xs">{description}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm text-primary">
@@ -401,7 +446,10 @@ export default function ScreenerPage() {
               <div className="flex gap-3 mt-6">
                 <Button
                   variant="outline"
-                  onClick={() => setConfig(DEFAULT_SCREENER_CONFIG)}
+                  onClick={() => {
+                    setConfig(DEFAULT_SCREENER_CONFIG);
+                    setActiveStrategy("balanced");
+                  }}
                 >
                   Reset Defaults
                 </Button>

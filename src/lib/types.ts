@@ -569,6 +569,68 @@ export interface PriceUpdateResult {
   updatedAt: string;
 }
 
+// ---- Strategy Presets ----
+
+export type ScreenerStrategy =
+  | "balanced"
+  | "indian_favourite"
+  | "multi_signal"
+  | "conservative";
+
+export const STRATEGY_LABELS: Record<
+  ScreenerStrategy,
+  { name: string; description: string }
+> = {
+  balanced: {
+    name: "Balanced",
+    description: "Default settings — all phases weighted equally",
+  },
+  indian_favourite: {
+    name: "Indian Favourite",
+    description:
+      "SuperTrend + Bollinger focus, popular with Indian retail traders",
+  },
+  multi_signal: {
+    name: "Multi-Signal",
+    description:
+      "Higher ADX + volume bar — demands strong trend with institutional volume",
+  },
+  conservative: {
+    name: "Conservative",
+    description:
+      "Tight RSI + high R:R — fewer signals but higher quality setups",
+  },
+};
+
+export const STRATEGY_PRESETS: Record<
+  ScreenerStrategy,
+  Partial<ScreenerConfig>
+> = {
+  balanced: {},
+  indian_favourite: {
+    requireSuperTrendUp: true,
+    requireBollingerExpanding: true,
+    rsiLow: 45,
+    rsiHigh: 70,
+  },
+  multi_signal: {
+    minADX: 28,
+    requireMACDBullish: true,
+    mfiLow: 45,
+    mfiHigh: 75,
+    volumeMultiplier: 1.5,
+  },
+  conservative: {
+    minADX: 30,
+    rsiLow: 50,
+    rsiHigh: 65,
+    volumeMultiplier: 1.5,
+    minRiskReward: 2.5,
+    maxATRPercent: 4,
+    maxCapitalRisk: 5,
+  },
+};
+
 // ---- Screener Config ----
 
 export const DEFAULT_SCREENER_CONFIG: ScreenerConfig = {
