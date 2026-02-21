@@ -68,6 +68,9 @@ export interface TechnicalIndicators {
   // MFI
   mfi14: number;
 
+  // Accumulation/Distribution Line
+  adLineTrend: "up" | "down" | "flat";
+
   // SuperTrend
   superTrend: number;
   superTrendDirection: "up" | "down";
@@ -262,6 +265,9 @@ export interface Phase3Details {
   plusDIAboveMinusDI: boolean;
   stochasticBullish: boolean;
   macdBullish: boolean;
+  cciBullish: boolean;       // CCI(20) > 0
+  cciStrong: boolean;        // CCI(20) > 100 (strong uptrend)
+  williamsRBullish: boolean;  // Williams %R in healthy zone (-50 to -20)
   divergenceResult: DivergenceResult;
   divergenceScoreImpact: number; // Net score impact from divergences (-15 to +8)
 }
@@ -270,6 +276,8 @@ export interface Phase4VolumeDetails {
   obvTrendingUp: boolean;
   volumeAboveAvg: boolean;
   mfiHealthy: boolean;
+  adLineTrendingUp: boolean;   // A/D Line trending up (accumulation)
+  adLineDivergence: boolean;   // Price up but A/D down (distribution warning)
   volumeTrend: 'accelerating' | 'steady' | 'declining';
   volumeTrendScore: number; // Score contribution: -3, +2, or +5
   vroc20: number; // Volume Rate of Change value

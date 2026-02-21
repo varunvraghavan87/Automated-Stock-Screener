@@ -228,6 +228,13 @@ export function phase3Analyze(
   // MACD histogram positive
   const macdBullish = indicators.macdHistogram > 0;
 
+  // CCI(20): > 0 = moderate bullish, > 100 = strong uptrend
+  const cciBullish = indicators.cci20 > 0;
+  const cciStrong = indicators.cci20 > 100;
+
+  // Williams %R: between -50 and -20 = healthy momentum zone
+  const williamsRBullish = indicators.williamsR > -50 && indicators.williamsR < -20;
+
   return {
     pullbackToEMA,
     rsiInZone,
@@ -241,6 +248,9 @@ export function phase3Analyze(
     plusDIAboveMinusDI,
     stochasticBullish,
     macdBullish,
+    cciBullish,
+    cciStrong,
+    williamsRBullish,
     divergenceResult: indicators.divergences,
     divergenceScoreImpact: indicators.divergences.netScoreImpact,
   };
@@ -299,6 +309,11 @@ export function phase4VolumeAnalyze(
   const volumeAboveAvg = stock.volume > indicators.volumeSMA20 * config.volumeMultiplier;
   const mfiHealthy = indicators.mfi14 >= config.mfiLow && indicators.mfi14 <= config.mfiHigh;
 
+  // A/D Line: accumulation vs distribution
+  const adLineTrendingUp = indicators.adLineTrend === "up";
+  // Divergence warning: price rising but A/D line falling (distribution)
+  const adLineDivergence = indicators.weekChange > 0 && indicators.adLineTrend === "down";
+
   // Volume trend analysis (3-bar acceleration)
   const { trend: volumeTrend, score: volumeTrendScore } = classifyVolumeTrend(
     indicators.volumeRecent3
@@ -308,6 +323,8 @@ export function phase4VolumeAnalyze(
     obvTrendingUp,
     volumeAboveAvg,
     mfiHealthy,
+    adLineTrendingUp,
+    adLineDivergence,
     volumeTrend,
     volumeTrendScore,
     vroc20: indicators.vroc20,
@@ -401,7 +418,7 @@ function calculateScore(
   // Multi-Timeframe Confirmation: weekly trend score (+5 aligned, -10 counter-trend, 0 mixed)
   score += indicators.weeklyTrend.score;
 
-  // Phase 3: Momentum (25 pts max)
+  // Phase 3: Momentum (30 pts max)
   if (phase3.pullbackToEMA) score += 5;
   // Tiered RSI scoring: -3 to +5 based on quality zone
   score += phase3.rsiTierScore;
@@ -410,17 +427,25 @@ function calculateScore(
   if (phase3.stochasticBullish) score += 3;
   if (phase3.macdBullish) score += 2;
   if (phase3.candlestickPattern) score += 2;
+  // CCI(20): +2 for strong (>100), +1 for moderate (>0)
+  if (phase3.cciStrong) score += 2;
+  else if (phase3.cciBullish) score += 1;
+  // Williams %R in healthy momentum zone (-50 to -20)
+  if (phase3.williamsRBullish) score += 2;
 
   // Divergence scoring (Phase 3 extension): clamped -15 to +8 pts
   score += phase3.divergenceScoreImpact;
 
-  // Phase 4: Volume (20 pts max — expanded with trend analysis)
+  // Phase 4: Volume (23 pts max — expanded with A/D Line)
   if (phase4Vol.obvTrendingUp) score += 5;
   if (phase4Vol.mfiHealthy) score += 5;
   // Volume trend: -3 (declining) to +5 (accelerating), replaces flat volumeAboveAvg check
   score += phase4Vol.volumeTrendScore;
   // Bonus if volume is above average (additional confirmation)
   if (phase4Vol.volumeAboveAvg) score += 3;
+  // A/D Line: +3 for accumulation, -3 for distribution divergence
+  if (phase4Vol.adLineTrendingUp) score += 3;
+  if (phase4Vol.adLineDivergence) score -= 3;
 
   // Phase 5: Volatility (10 pts)
   if (phase5Vola.atrReasonable) score += 4;

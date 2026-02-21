@@ -23,6 +23,7 @@ import {
   calculateRelativeStrength,
   detectCandlestickPattern,
   calculateVROC,
+  calculateADLine,
   aggregateDailyToWeekly,
   detectDivergences,
 } from "./indicators";
@@ -327,6 +328,14 @@ export class LiveDataService {
       obvCurrent > obv10Ago * 1.01 ? "up" :
       obvCurrent < obv10Ago * 0.99 ? "down" : "flat";
 
+    // Accumulation/Distribution Line
+    const adLine = calculateADLine(high, low, close, volume);
+    const adlCurrent = adLine[adLine.length - 1];
+    const adl10Ago = adLine.length > 10 ? adLine[adLine.length - 11] : adLine[0];
+    const adLineTrend: "up" | "down" | "flat" =
+      adlCurrent > adl10Ago * 1.01 ? "up" :
+      adlCurrent < adl10Ago * 0.99 ? "down" : "flat";
+
     // MFI
     const mfi = calculateMFI(high, low, close, volume, 14);
 
@@ -410,6 +419,7 @@ export class LiveDataService {
       obv: obvCurrent,
       obvTrend,
       mfi14: mfi.length > 0 ? last(mfi) : 50,
+      adLineTrend,
       superTrend: st.supertrend.length > 0 ? last(st.supertrend) : lastClose,
       superTrendDirection: st.direction.length > 0 ? st.direction[st.direction.length - 1] : "up",
       parabolicSAR: sarValue,

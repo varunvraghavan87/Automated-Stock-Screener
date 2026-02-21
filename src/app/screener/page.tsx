@@ -31,7 +31,13 @@ import {
   Link2Off,
   ShoppingCart,
   AlertTriangle,
+  Info,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   type ScreenerConfig,
   type ScreenerResult,
@@ -775,6 +781,7 @@ function StockRow({
                 <IndicatorCard
                   label="EMA 20"
                   value={formatCurrency(result.indicators.ema20)}
+                  tooltip="20-day Exponential Moving Average. Price above EMA20 = short-term uptrend. The screener requires price > EMA20 > EMA50 > EMA200 for trend alignment."
                   status={
                     result.stock.lastPrice > result.indicators.ema20
                       ? "good"
@@ -784,6 +791,7 @@ function StockRow({
                 <IndicatorCard
                   label="EMA 50"
                   value={formatCurrency(result.indicators.ema50)}
+                  tooltip="50-day EMA tracks medium-term trend. Price above EMA50 = intermediate uptrend confirmed. Golden Cross: 50-EMA crosses above 200-EMA."
                   status={
                     result.indicators.ema20 > result.indicators.ema50
                       ? "good"
@@ -793,6 +801,7 @@ function StockRow({
                 <IndicatorCard
                   label="EMA 200"
                   value={formatCurrency(result.indicators.ema200)}
+                  tooltip="200-day EMA is the long-term trend benchmark. Price above 200-EMA = long-term bull market for this stock."
                   status={
                     result.indicators.ema50 > result.indicators.ema200
                       ? "good"
@@ -802,11 +811,13 @@ function StockRow({
                 <IndicatorCard
                   label="ADX(14)"
                   value={result.indicators.adx14.toFixed(1)}
+                  tooltip="Average Directional Index measures trend strength (not direction). >25 = confirmed trend, >40 = very strong. Screener requires >=25 (adapted higher in bear markets)."
                   status={result.indicators.adx14 > 25 ? "good" : "neutral"}
                 />
                 <IndicatorCard
                   label="MACD"
                   value={result.indicators.macdLine.toFixed(2)}
+                  tooltip="Moving Average Convergence Divergence: 12-EMA minus 26-EMA. Line above Signal AND above zero = confirmed bullish momentum."
                   status={
                     result.indicators.macdLine > result.indicators.macdSignal &&
                     result.indicators.macdLine > 0
@@ -817,12 +828,14 @@ function StockRow({
                 <IndicatorCard
                   label="SuperTrend"
                   value={result.indicators.superTrendDirection.toUpperCase()}
+                  tooltip="ATR-based trend indicator popular in Indian markets. UP = bullish (line acts as support). DOWN = bearish. Uses ATR period 10, multiplier 3."
                   status={result.indicators.superTrendDirection === "up" ? "good" : "bad"}
                 />
                 {/* Momentum Indicators */}
                 <IndicatorCard
                   label="RSI(14)"
                   value={`${result.indicators.rsi14.toFixed(1)} (${result.phase3Details.rsiTier})`}
+                  tooltip="Relative Strength Index (0-100). 50-70 = healthy bullish momentum. >70 = overbought caution. <30 = oversold. Screener uses tiered zones: 45-55 optimal, 55-65 good."
                   status={
                     result.indicators.rsi14 >= 45 && result.indicators.rsi14 <= 65
                       ? "good"
@@ -834,27 +847,54 @@ function StockRow({
                 <IndicatorCard
                   label="Stochastic %K"
                   value={result.indicators.stochasticK.toFixed(1)}
+                  tooltip="Shows where price closed relative to its 14-day range. >50 = bullish momentum. >80 = overbought. <20 = oversold."
                   status={result.indicators.stochasticK > 50 ? "good" : "neutral"}
                 />
                 <IndicatorCard
                   label="ROC(14)"
                   value={`${result.indicators.roc14 > 0 ? "+" : ""}${result.indicators.roc14.toFixed(1)}%`}
+                  tooltip="Rate of Change: % price change over 14 days. Positive = upward momentum. Rising ROC = accelerating trend."
                   status={result.indicators.roc14 > 0 ? "good" : "bad"}
                 />
                 <IndicatorCard
                   label="+DI / -DI"
                   value={`${result.indicators.plusDI.toFixed(0)} / ${result.indicators.minusDI.toFixed(0)}`}
+                  tooltip="Directional Indicators from ADX system. +DI > -DI = buyers stronger than sellers (bullish direction)."
                   status={result.indicators.plusDI > result.indicators.minusDI ? "good" : "bad"}
+                />
+                <IndicatorCard
+                  label="CCI(20)"
+                  value={result.indicators.cci20.toFixed(0)}
+                  tooltip="Commodity Channel Index measures price deviation from average. >100 = strong uptrend, >0 = moderate bullish, <-100 = strong downtrend."
+                  status={
+                    result.indicators.cci20 > 100
+                      ? "good"
+                      : result.indicators.cci20 > 0
+                        ? "neutral"
+                        : "bad"
+                  }
+                />
+                <IndicatorCard
+                  label="Williams %R"
+                  value={result.indicators.williamsR.toFixed(1)}
+                  tooltip="Williams %R shows momentum on a -100 to 0 scale. -20 to -50 = healthy bullish zone. Above -20 = overbought. Below -80 = oversold."
+                  status={
+                    result.indicators.williamsR > -50 && result.indicators.williamsR < -20
+                      ? "good"
+                      : "neutral"
+                  }
                 />
                 {/* Volume Indicators */}
                 <IndicatorCard
                   label="OBV Trend"
                   value={result.indicators.obvTrend.toUpperCase()}
+                  tooltip="On-Balance Volume: cumulative volume on up vs down days. Rising OBV = accumulation (buying pressure). Divergence from price warns of reversal."
                   status={result.indicators.obvTrend === "up" ? "good" : "bad"}
                 />
                 <IndicatorCard
                   label="MFI(14)"
                   value={result.indicators.mfi14.toFixed(0)}
+                  tooltip="Money Flow Index: volume-weighted RSI (0-100). 40-80 = healthy flow. >80 = overbought. <20 = oversold. Confirms buying pressure."
                   status={
                     result.indicators.mfi14 >= 40 && result.indicators.mfi14 <= 80
                       ? "good"
@@ -862,8 +902,15 @@ function StockRow({
                   }
                 />
                 <IndicatorCard
+                  label="A/D Line"
+                  value={result.indicators.adLineTrend.toUpperCase()}
+                  tooltip="Accumulation/Distribution Line tracks money flow using price position within the range. UP = accumulation (smart money buying). DOWN = distribution (selling)."
+                  status={result.indicators.adLineTrend === "up" ? "good" : result.indicators.adLineTrend === "down" ? "bad" : "neutral"}
+                />
+                <IndicatorCard
                   label={`Volume (${result.phase4VolumeDetails.volumeTrend})`}
                   value={`${(result.stock.volume / 1000000).toFixed(1)}M`}
+                  tooltip="Current volume vs 20-day average. 1.2x+ = above average (institutional participation). 3-bar acceleration = volume increasing consistently."
                   status={
                     result.phase4VolumeDetails.volumeTrend === "accelerating"
                       ? "good"
@@ -876,6 +923,7 @@ function StockRow({
                 <IndicatorCard
                   label="ATR(14)"
                   value={result.indicators.atr14.toFixed(2)}
+                  tooltip="Average True Range measures daily volatility. Used for stop-loss (1.5x ATR below entry) and position sizing. <5% of price = manageable risk."
                   status={
                     (result.indicators.atr14 / result.stock.lastPrice) * 100 < 5
                       ? "good"
@@ -885,28 +933,33 @@ function StockRow({
                 <IndicatorCard
                   label="Bollinger %B"
                   value={result.indicators.bollingerPercentB.toFixed(2)}
+                  tooltip="Position within Bollinger Bands. >0.5 = upper half (bullish). >1.0 = above upper band (breakout). <0 = below lower band."
                   status={result.indicators.bollingerPercentB > 0.5 ? "good" : "neutral"}
                 />
                 {/* Extra */}
                 <IndicatorCard
                   label="3M RS"
                   value={`${result.indicators.relativeStrength3M > 0 ? "+" : ""}${result.indicators.relativeStrength3M.toFixed(1)}%`}
+                  tooltip="3-month Relative Strength vs Nifty 50. Positive = outperforming the index. >5% = strongly outperforming."
                   status={result.indicators.relativeStrength3M > 0 ? "good" : "bad"}
                 />
                 <IndicatorCard
                   label="Ichimoku Cloud"
                   value={result.indicators.ichimokuCloudSignal.toUpperCase()}
+                  tooltip="ABOVE = price above cloud (bullish). BELOW = bearish. INSIDE = transition/avoid. Cloud provides dynamic support/resistance."
                   status={result.indicators.ichimokuCloudSignal === "above" ? "good" : "bad"}
                 />
                 <IndicatorCard
                   label="Parabolic SAR"
                   value={result.indicators.sarTrend.toUpperCase()}
+                  tooltip="Stop and Reverse: UP = dots below price (uptrend). DOWN = dots above (downtrend). Dots act as trailing stop levels."
                   status={result.indicators.sarTrend === "up" ? "good" : "bad"}
                 />
                 {/* Weekly Timeframe */}
                 <IndicatorCard
                   label="Weekly Trend"
                   value={result.phase2WeeklyTrend.status.toUpperCase()}
+                  tooltip="Multi-timeframe confirmation. ALIGNED = daily and weekly trends agree (strongest signal). COUNTER = daily opposes weekly (risky)."
                   status={
                     result.phase2WeeklyTrend.status === "aligned"
                       ? "good"
@@ -918,6 +971,7 @@ function StockRow({
                 <IndicatorCard
                   label="Weekly RSI"
                   value={result.phase2WeeklyTrend.weeklyRSI.toFixed(1)}
+                  tooltip="RSI on weekly timeframe. Above 40 = weekly uptrend intact. Confirms daily signals are not just noise."
                   status={result.phase2WeeklyTrend.rsiAbove40 ? "good" : "bad"}
                 />
                 {/* Divergence */}
@@ -930,6 +984,7 @@ function StockRow({
                         ? "BEARISH"
                         : "NONE"
                   }
+                  tooltip="When price and indicators disagree. BULLISH = price falling but indicators rising (potential reversal up). BEARISH = price rising but indicators weakening."
                   status={
                     result.indicators.divergences.hasBullish
                       ? "good"
@@ -942,6 +997,7 @@ function StockRow({
                 <IndicatorCard
                   label={`Sector #${result.sectorContext.sectorRank}`}
                   value={result.sectorContext.sectorName}
+                  tooltip="Sector rotation ranking based on relative strength, breadth, and momentum. Top 3 sectors get +5 score bonus, bottom 3 get -5 penalty."
                   status={
                     result.sectorContext.isTopSector
                       ? "good"
@@ -1056,10 +1112,12 @@ function IndicatorCard({
   label,
   value,
   status,
+  tooltip,
 }: {
   label: string;
   value: string;
   status: "good" | "bad" | "neutral";
+  tooltip?: string;
 }) {
   const borderColor =
     status === "good"
@@ -1068,11 +1126,27 @@ function IndicatorCard({
         ? "border-destructive/30"
         : "border-border";
 
-  return (
+  const card = (
     <div className={`p-3 rounded-lg bg-background/50 border ${borderColor}`}>
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <div className="flex items-start justify-between gap-1">
+        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+        {tooltip && (
+          <Info className="h-3 w-3 text-muted-foreground/50 flex-shrink-0 mt-0.5" />
+        )}
+      </div>
       <p className="font-mono font-semibold">{value}</p>
     </div>
+  );
+
+  if (!tooltip) return card;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[280px] text-xs">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
