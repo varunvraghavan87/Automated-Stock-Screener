@@ -47,6 +47,7 @@ import {
   DEFAULT_SCREENER_CONFIG,
   STRATEGY_LABELS,
   STRATEGY_PRESETS,
+  computeSignalChange,
 } from "@/lib/types";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
@@ -71,6 +72,7 @@ export default function ScreenerPage() {
     kiteStatus,
     marketRegime,
     adaptiveThresholds,
+    previousSignals,
     refresh,
     connectKite,
     disconnectKite,
@@ -501,6 +503,7 @@ export default function ScreenerPage() {
             <StockRow
               key={result.stock.symbol}
               result={result}
+              previousSignal={previousSignals[result.stock.symbol]?.signal}
               expanded={expandedRow === result.stock.symbol}
               onToggle={() =>
                 setExpandedRow(
@@ -547,15 +550,18 @@ export default function ScreenerPage() {
 
 function StockRow({
   result,
+  previousSignal,
   expanded,
   onToggle,
   onBuy,
 }: {
   result: ScreenerResult;
+  previousSignal?: string;
   expanded: boolean;
   onToggle: () => void;
   onBuy: () => void;
 }) {
+  const signalChange = computeSignalChange(result.signal, previousSignal);
   const signalColors: Record<string, string> = {
     STRONG_BUY: "text-accent",
     BUY: "text-primary",
@@ -652,6 +658,21 @@ function StockRow({
           >
             {result.signal.replace("_", " ")}
           </Badge>
+          {signalChange === "UPGRADED" && (
+            <Badge className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+              ↑ Up
+            </Badge>
+          )}
+          {signalChange === "DOWNGRADED" && (
+            <Badge className="text-[10px] bg-red-500/15 text-red-400 border-red-500/30">
+              ↓ Down
+            </Badge>
+          )}
+          {signalChange === "NEW" && (
+            <Badge className="text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/30">
+              NEW
+            </Badge>
+          )}
           {result.phase3Details.divergenceResult.hasBullish && (
             <Badge variant="success" className="text-[10px] gap-0.5">
               Bull Div

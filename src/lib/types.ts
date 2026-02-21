@@ -656,3 +656,73 @@ export const DEFAULT_SCREENER_CONFIG: ScreenerConfig = {
   minRiskReward: 2,
   maxCapitalRisk: 8,
 };
+
+// ---- Signal Change Alert Types (#6) ----
+
+export type SignalChangeType = "UPGRADED" | "DOWNGRADED" | "NEW" | "UNCHANGED";
+
+export const SIGNAL_HIERARCHY: Record<string, number> = {
+  AVOID: 0,
+  NEUTRAL: 1,
+  WATCH: 2,
+  BUY: 3,
+  STRONG_BUY: 4,
+};
+
+export interface PreviousSignalMap {
+  [symbol: string]: { signal: string; score: number };
+}
+
+export function computeSignalChange(
+  currentSignal: string,
+  previousSignal: string | undefined
+): SignalChangeType {
+  if (previousSignal === undefined) return "NEW";
+  const currentRank = SIGNAL_HIERARCHY[currentSignal] ?? -1;
+  const previousRank = SIGNAL_HIERARCHY[previousSignal] ?? -1;
+  if (currentRank > previousRank) return "UPGRADED";
+  if (currentRank < previousRank) return "DOWNGRADED";
+  return "UNCHANGED";
+}
+
+// ---- Backtest / Strategy-Level Analytics Types (#8) ----
+
+export interface ScoreTierPerformance {
+  tier: string;
+  tierLabel: string;
+  scoreMin: number;
+  scoreMax: number;
+  signalCount: number;
+  avgReturn1d: number | null;
+  avgReturn3d: number | null;
+  avgReturn5d: number | null;
+  avgReturn10d: number | null;
+  winRate: number;
+  wins: number;
+  losses: number;
+}
+
+export interface SectorSignalPerformance {
+  sector: string;
+  signal: string;
+  signalCount: number;
+  avgReturn10d: number | null;
+  winRate: number;
+  wins: number;
+  losses: number;
+}
+
+export type ConfidenceLevel = "high" | "moderate" | "low" | "insufficient";
+
+export interface StrategySummaryText {
+  summaryLines: string[];
+  overallVerdict: string;
+  confidenceLevel: ConfidenceLevel;
+  totalResolvedSignals: number;
+}
+
+export interface BacktestAnalytics {
+  scoreTierPerformance: ScoreTierPerformance[];
+  sectorPerformance: SectorSignalPerformance[];
+  strategySummary: StrategySummaryText;
+}

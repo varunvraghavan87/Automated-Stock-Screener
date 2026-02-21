@@ -22,6 +22,7 @@ import type {
   MarketRegimeInfo,
   AdaptiveThresholds,
   SectorRankings,
+  PreviousSignalMap,
 } from "@/lib/types";
 import { EMPTY_SECTOR_RANKINGS } from "@/lib/types";
 
@@ -41,6 +42,7 @@ interface ScreenerContextValue {
   marketRegime: MarketRegimeInfo;
   adaptiveThresholds: AdaptiveThresholds;
   sectorRankings: SectorRankings;
+  previousSignals: PreviousSignalMap;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;
@@ -60,6 +62,7 @@ interface PersistedScreenerState {
   sectorRankings: SectorRankings;
   kiteStatus: KiteStatus;
   lastRefresh: string; // ISO string (Date is not JSON-serializable)
+  previousSignals?: PreviousSignalMap; // Optional for backward compat with existing caches
 }
 
 function saveToSessionStorage(state: {
@@ -69,6 +72,7 @@ function saveToSessionStorage(state: {
   sectorRankings: SectorRankings;
   kiteStatus: KiteStatus;
   lastRefresh: Date;
+  previousSignals: PreviousSignalMap;
 }): void {
   try {
     const payload: PersistedScreenerState = {
@@ -80,6 +84,7 @@ function saveToSessionStorage(state: {
       sectorRankings: state.sectorRankings,
       kiteStatus: state.kiteStatus,
       lastRefresh: state.lastRefresh.toISOString(),
+      previousSignals: state.previousSignals,
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -176,6 +181,9 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
   const [adaptiveThresholds, setAdaptiveThresholds] = useState<AdaptiveThresholds>(
     cachedState.current?.adaptiveThresholds ?? defaultThresholds
   );
+  const [previousSignals, setPreviousSignals] = useState<PreviousSignalMap>(
+    cachedState.current?.previousSignals ?? {}
+  );
 
   // Track whether we've already done the initial auto-refresh
   const hasAutoRefreshed = useRef(false);
@@ -237,6 +245,7 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
             sectorRankings: (data.sectorRankings as SectorRankings) ?? sectorRankings,
             kiteStatus,
             lastRefresh: new Date(data.timestamp),
+            previousSignals,
           });
         } else {
           // Demo mode: run screener client-side with mock data + adaptive thresholds
@@ -252,6 +261,12 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
 
         // Also refresh Kite status
         await checkKiteStatus();
+
+        // Fetch previous signals for change badges (non-blocking, non-critical)
+        fetch("/api/screener/previous-signals")
+          .then((res) => (res.ok ? res.json() : { signals: {} }))
+          .then((data) => setPreviousSignals(data.signals || {}))
+          .catch(() => {});
       } catch (error) {
         console.error("Failed to refresh from API, using client-side data:", error);
         // Fallback: re-run screener client-side with default regime
@@ -335,6 +350,7 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         marketRegime,
         adaptiveThresholds,
         sectorRankings,
+        previousSignals,
         refresh,
         checkKiteStatus,
         connectKite,

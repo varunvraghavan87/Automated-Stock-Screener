@@ -7,6 +7,7 @@ import type {
   MarketRegimeInfo,
   AdaptiveThresholds,
   SectorRankings,
+  PreviousSignalMap,
 } from "@/lib/types";
 
 interface KiteStatus {
@@ -25,6 +26,7 @@ export interface UseScreenerDataReturn {
   marketRegime: MarketRegimeInfo;
   adaptiveThresholds: AdaptiveThresholds;
   sectorRankings: SectorRankings;
+  previousSignals: PreviousSignalMap;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;
