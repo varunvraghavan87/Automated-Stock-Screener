@@ -50,10 +50,11 @@ export async function exchangeToken(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      `Token exchange failed: ${response.status} — ${errorData?.message || "Unknown error"}`
-    );
+    // Consume body but don't include raw API error details in thrown error —
+    // Kite error messages may contain sensitive API internals that would be
+    // logged by the callback handler's console.error().
+    await response.json().catch(() => {});
+    throw new Error(`Kite token exchange failed with HTTP ${response.status}`);
   }
 
   const result = await response.json();

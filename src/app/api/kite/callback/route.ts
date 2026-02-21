@@ -7,7 +7,9 @@ import { exchangeToken, storeSession } from "@/lib/kite-session";
 import { cookies } from "next/headers";
 
 const FLASH_COOKIE_OPTIONS = {
-  httpOnly: false, // Readable by client JS to display error
+  // httpOnly: false so client JS can read and display the error message.
+  // SAFE because values are hardcoded strings (never user-controlled input).
+  httpOnly: false,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   maxAge: 30, // 30 seconds — just long enough to read and display

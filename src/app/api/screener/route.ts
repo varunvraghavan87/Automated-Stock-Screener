@@ -265,10 +265,14 @@ export async function POST(request: Request) {
   let mode = "demo";
   let marketRegime: MarketRegimeInfo | null = null;
 
-  // Priority: 1) Active Kite session (cookie), 2) Env vars, 3) Demo mode
+  // Priority: 1) Active Kite session (cookie), 2) Demo mode
+  // NOTE: Only the user's own OAuth session token is used for API access.
+  // KITE_API_KEY env var is the public app identifier (needed for OAuth initiation).
+  // KITE_ACCESS_TOKEN env var fallback was removed to prevent credential sharing
+  // across users in multi-user deployments.
   const session = await getSession();
   const kiteApiKey = session?.apiKey || process.env.KITE_API_KEY;
-  const kiteAccessToken = session?.accessToken || process.env.KITE_ACCESS_TOKEN;
+  const kiteAccessToken = session?.accessToken;
 
   if (kiteApiKey && kiteAccessToken) {
     // Acquire lock before making Kite API calls
