@@ -111,8 +111,12 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Approved user on auth pages (except callback) → redirect to home
-    if (isAuthRoute && pathname !== "/auth/callback") {
+    // Approved user on auth pages (except callback/update-password) → redirect to home
+    if (
+      isAuthRoute &&
+      pathname !== "/auth/callback" &&
+      pathname !== "/auth/update-password"
+    ) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);
