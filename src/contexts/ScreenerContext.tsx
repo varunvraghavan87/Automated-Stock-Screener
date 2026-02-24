@@ -53,7 +53,7 @@ interface ScreenerContextValue {
 
 // ─── Session Storage Persistence ─────────────────────────────────────────────
 const STORAGE_KEY = "nva_screener_state";
-const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000; // 8 hours — aligned with Kite session lifetime (expires 6 AM IST)
 
 interface PersistedScreenerState {
   version: 1;
@@ -191,17 +191,22 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
   // Track whether we've already done the initial auto-refresh
   const hasAutoRefreshed = useRef(false);
 
-  // Check Kite connection status
+  // Check Kite connection status (with 5s timeout to prevent hanging)
   const checkKiteStatus = useCallback(async () => {
     try {
-      const response = await fetch("/api/kite/status");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch("/api/kite/status", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (response.ok) {
         const status = await response.json();
         setKiteStatus(status);
         return status;
       }
     } catch {
-      // Silently fail — status check is non-critical
+      // Silently fail — status check is non-critical (timeout, network error, etc.)
     }
     return null;
   }, []);
@@ -293,11 +298,14 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       const status = await checkKiteStatus();
+
       if (status?.connected && !hasAutoRefreshed.current) {
+        // Kite confirmed connected — fetch fresh live data
         hasAutoRefreshed.current = true;
         await refresh();
-      } else if (!status?.connected && cachedState.current) {
-        // Kite disconnected but we loaded cached data — clear cache and revert to demo
+      } else if (status && !status.connected && cachedState.current) {
+        // Kite explicitly reported disconnected (not a fetch failure) —
+        // clear stale live cache and revert to demo
         clearSessionStorage();
         setMode("demo");
         const thresholds = getAdaptiveThresholds(DEFAULT_DEMO_REGIME.regime);
@@ -309,6 +317,10 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         setAdaptiveThresholds(thresholds);
         setSectorRankings(demoSectorRankings);
       }
+      // If status is null (fetch failed/timed out), keep whatever state we
+      // initialized with (cached live data or demo). Don't clear the cache —
+      // the user can manually refresh when connectivity is restored.
+
       // Allow GC of cached data after initialization
       cachedState.current = null;
     };
