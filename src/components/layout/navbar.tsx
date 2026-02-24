@@ -14,6 +14,7 @@ import {
   User,
   LogOut,
   HelpCircle,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,7 +41,7 @@ const navItems = [
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [glossaryOpen, setGlossaryOpen] = useState(false);
 
   const handleSignOut = async () => {
@@ -137,6 +138,18 @@ export function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {role === "admin" && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => router.push("/admin")}
+                        className="cursor-pointer"
+                      >
+                        <Shield className="w-4 h-4 mr-2" />
+                        Admin Panel
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem
                     onClick={handleSignOut}
                     className="cursor-pointer text-destructive focus:text-destructive"

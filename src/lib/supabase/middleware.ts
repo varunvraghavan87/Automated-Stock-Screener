@@ -61,11 +61,62 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If authenticated and trying to access auth pages (except callback), redirect to home
-  if (user && isAuthRoute && pathname !== "/auth/callback") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+  // ─── Approval Status Check ──────────────────────────────────────────
+  // Authenticated users must have an approved profile to access the app.
+  if (user) {
+    // Routes that pending/rejected users ARE allowed to access
+    const pendingAllowedPaths = [
+      "/auth/pending",
+      "/auth/callback",
+      "/auth/update-password",
+    ];
+    const isAllowedForPending =
+      pendingAllowedPaths.includes(pathname) ||
+      pathname.startsWith("/api/auth");
+
+    // Query the user's approval status (indexed on user_id UNIQUE — sub-5ms)
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("approval_status, role")
+      .eq("user_id", user.id)
+      .single();
+
+    const status = profile?.approval_status;
+
+    // Block unapproved users from accessing the app
+    if (!status || status === "pending" || status === "rejected") {
+      // API routes: return 403 JSON (not redirect)
+      if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
+        return NextResponse.json(
+          { error: "Account not approved" },
+          { status: 403 }
+        );
+      }
+      // Page routes: redirect to pending page
+      if (!isAllowedForPending) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/auth/pending";
+        if (status === "rejected") {
+          url.searchParams.set("status", "rejected");
+        }
+        return NextResponse.redirect(url);
+      }
+      return supabaseResponse;
+    }
+
+    // Admin route protection — only admin role can access /admin/*
+    if (pathname.startsWith("/admin") && profile?.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    // Approved user on auth pages (except callback) → redirect to home
+    if (isAuthRoute && pathname !== "/auth/callback") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

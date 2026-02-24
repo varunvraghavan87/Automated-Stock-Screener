@@ -115,3 +115,11 @@ export const KiteCredentialsSchema = z
       .regex(/^[a-zA-Z0-9]+$/, "API Secret must be alphanumeric"),
   })
   .strict();
+
+// ─── Admin Schemas ──────────────────────────────────────────────────────
+
+export const AdminRejectSchema = z
+  .object({
+    reason: z.string().max(500).optional().default(""),
+  })
+  .strict();

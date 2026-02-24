@@ -87,7 +87,8 @@ export default function RegisterPage() {
           <p className="text-muted-foreground text-sm">
             We&apos;ve sent a confirmation link to{" "}
             <span className="font-medium text-foreground">{email}</span>. Click
-            the link to activate your account.
+            the link to verify your email. Once verified, your account will be
+            reviewed by an administrator before you can access the app.
           </p>
           <Link href="/auth/login">
             <Button variant="outline" className="mt-4">

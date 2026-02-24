@@ -16,6 +16,8 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  role: string | null;
+  approvalStatus: string | null;
   signOut: () => Promise<void>;
 }
 
@@ -33,6 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
 
   // Store supabase client in a ref so it's created once
   const supabaseRef = useRef<SupabaseClient | null>(null);
@@ -56,6 +60,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } = await supabase.auth.getSession();
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
+
+        // Fetch user profile for role and approval status
+        if (initialSession?.user) {
+          const { data: profile } = await supabase
+            .from("user_profiles")
+            .select("role, approval_status")
+            .eq("user_id", initialSession.user.id)
+            .single();
+          setRole(profile?.role ?? null);
+          setApprovalStatus(profile?.approval_status ?? null);
+        }
       } catch (error) {
         console.error("Error getting initial session:", error);
       } finally {
@@ -68,9 +83,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth state changes (login, logout, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      if (newSession?.user) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("role, approval_status")
+          .eq("user_id", newSession.user.id)
+          .single();
+        setRole(profile?.role ?? null);
+        setApprovalStatus(profile?.approval_status ?? null);
+      } else {
+        setRole(null);
+        setApprovalStatus(null);
+      }
       setLoading(false);
     });
 
@@ -84,10 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    setRole(null);
+    setApprovalStatus(null);
   }, [supabase]);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, role, approvalStatus, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -34,7 +34,8 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/auth/") ||
     pathname === "/api/kite/auth" ||
-    pathname === "/api/kite/credentials"
+    pathname === "/api/kite/credentials" ||
+    pathname.startsWith("/api/admin/")
   ) {
     const result = checkRateLimit(`auth:${ip}`, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS);
     if (!result.allowed) {
