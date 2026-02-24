@@ -15,7 +15,10 @@ import {
   LogOut,
   HelpCircle,
   Shield,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -73,8 +76,14 @@ export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, role, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [marketStatus, setMarketStatus] = useState(getMarketStatus());
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -143,6 +152,21 @@ export function Navbar() {
             >
               <HelpCircle className="w-4 h-4" />
             </Button>
+            {mounted && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="text-muted-foreground hover:text-foreground"
+                title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </Button>
+            )}
             <div
               className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full ${indicatorStyle.bg} border ${indicatorStyle.border}`}
             >

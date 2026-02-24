@@ -706,12 +706,12 @@ function StockRow({
             {result.signal.replace("_", " ")}
           </Badge>
           {signalChange === "UPGRADED" && (
-            <Badge className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+            <Badge className="text-[10px] bg-emerald-500/20 text-emerald-400 border-emerald-500/40">
               ↑ Up
             </Badge>
           )}
           {signalChange === "DOWNGRADED" && (
-            <Badge className="text-[10px] bg-red-500/15 text-red-400 border-red-500/30">
+            <Badge className="text-[10px] bg-red-500/20 text-red-400 border-red-500/40">
               ↓ Down
             </Badge>
           )}
@@ -1200,14 +1200,14 @@ function PhaseResult({
   return (
     <div
       className={`p-3 rounded-lg border ${
-        passed ? "border-accent/20 bg-accent/5" : "border-border bg-background/50"
+        passed ? "border-accent/40 bg-accent/10" : "border-destructive/20 bg-destructive/5"
       }`}
     >
       <div className="flex items-center gap-2 mb-2">
         {passed ? (
           <CheckCircle2 className="w-4 h-4 text-accent" />
         ) : (
-          <XCircle className="w-4 h-4 text-muted-foreground" />
+          <XCircle className="w-4 h-4 text-destructive" />
         )}
         <span className="text-sm font-semibold">
           Phase {phase}: {title}
@@ -1237,20 +1237,34 @@ function IndicatorCard({
 }) {
   const borderColor =
     status === "good"
-      ? "border-accent/30"
+      ? "border-accent/60"
       : status === "bad"
-        ? "border-destructive/30"
+        ? "border-destructive/60"
         : "border-border";
 
+  const bgColor =
+    status === "good"
+      ? "bg-accent/10"
+      : status === "bad"
+        ? "bg-destructive/10"
+        : "bg-background/50";
+
+  const valueColor =
+    status === "good"
+      ? "text-accent"
+      : status === "bad"
+        ? "text-destructive"
+        : "";
+
   const card = (
-    <div className={`p-3 rounded-lg bg-background/50 border ${borderColor}`}>
+    <div className={`p-3 rounded-lg ${bgColor} border ${borderColor}`}>
       <div className="flex items-start justify-between gap-1">
         <p className="text-xs text-muted-foreground mb-1">{label}</p>
         {tooltip && (
           <Info className="h-3 w-3 text-muted-foreground/50 flex-shrink-0 mt-0.5" />
         )}
       </div>
-      <p className="font-mono font-semibold">{value}</p>
+      <p className={`font-mono font-semibold ${valueColor}`}>{value}</p>
     </div>
   );
 

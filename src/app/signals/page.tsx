@@ -54,25 +54,15 @@ import { generateHistoricalPrices } from "@/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { computeSignalPerformance, computeBacktestAnalytics } from "@/lib/signal-performance";
+import { useChartColors } from "@/hooks/useChartColors";
 import type { SignalSnapshot, ScreenerSnapshot, ConfidenceLevel } from "@/lib/types";
-
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#94a3b8", "#ef4444"];
-const HIT_RATE_COLORS = ["#10b981", "#ef4444", "#f59e0b"]; // target hit, stopped out, expired
-const CHART_TOOLTIP_STYLE = {
-  contentStyle: {
-    backgroundColor: "#141826",
-    border: "1px solid #1e293b",
-    borderRadius: "8px",
-  },
-};
-const RETURN_PERIOD_COLORS = ["#94a3b8", "#3b82f6", "#8b5cf6", "#10b981"]; // 1d, 3d, 5d, 10d
 
 function ConfidenceBadge({ level }: { level: ConfidenceLevel }) {
   const config = {
-    high: { label: "High Confidence", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-    moderate: { label: "Moderate Confidence", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
-    low: { label: "Low Confidence", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
-    insufficient: { label: "Insufficient Data", cls: "bg-red-500/15 text-red-400 border-red-500/30" },
+    high: { label: "High Confidence", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" },
+    moderate: { label: "Moderate Confidence", cls: "bg-blue-500/20 text-blue-400 border-blue-500/40" },
+    low: { label: "Low Confidence", cls: "bg-amber-500/20 text-amber-400 border-amber-500/40" },
+    insufficient: { label: "Insufficient Data", cls: "bg-red-500/20 text-red-400 border-red-500/40" },
   };
   const c = config[level];
   return <Badge className={`text-[10px] ${c.cls}`}>{c.label}</Badge>;
@@ -80,6 +70,18 @@ function ConfidenceBadge({ level }: { level: ConfidenceLevel }) {
 
 export default function SignalsPage() {
   const { results, mode, loading, lastRefresh, marketRegime, sectorRankings, refresh } = useScreenerData();
+  const chartColors = useChartColors();
+
+  const COLORS = [chartColors.accent, chartColors.primary, chartColors.warning, chartColors.muted, chartColors.destructive];
+  const HIT_RATE_COLORS = [chartColors.accent, chartColors.destructive, chartColors.warning];
+  const CHART_TOOLTIP_STYLE = {
+    contentStyle: {
+      backgroundColor: chartColors.tooltipBg,
+      border: `1px solid ${chartColors.tooltipBorder}`,
+      borderRadius: "8px",
+    },
+  };
+  const RETURN_PERIOD_COLORS = [chartColors.muted, chartColors.primary, chartColors.purple, chartColors.accent];
 
   // ---- Signal Performance State ----
   const [perfDays, setPerfDays] = useState(30);
@@ -396,11 +398,7 @@ export default function SignalsPage() {
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#141826",
-                            border: "1px solid #1e293b",
-                            borderRadius: "8px",
-                          }}
+                          {...CHART_TOOLTIP_STYLE}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -432,26 +430,22 @@ export default function SignalsPage() {
                       <BarChart data={sectorBreakdown} layout="vertical">
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#1e293b"
+                          stroke={chartColors.gridStroke}
                         />
-                        <XAxis type="number" stroke="#94a3b8" fontSize={12} />
+                        <XAxis type="number" stroke={chartColors.axisStroke} fontSize={12} />
                         <YAxis
                           type="category"
                           dataKey="sector"
-                          stroke="#94a3b8"
+                          stroke={chartColors.axisStroke}
                           fontSize={11}
                           width={100}
                         />
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#141826",
-                            border: "1px solid #1e293b",
-                            borderRadius: "8px",
-                          }}
+                          {...CHART_TOOLTIP_STYLE}
                         />
                         <Bar
                           dataKey="avgScore"
-                          fill="#3b82f6"
+                          fill={chartColors.primary}
                           radius={[0, 4, 4, 0]}
                         />
                       </BarChart>
@@ -546,23 +540,23 @@ export default function SignalsPage() {
                             >
                               <stop
                                 offset="5%"
-                                stopColor="#3b82f6"
+                                stopColor={chartColors.primary}
                                 stopOpacity={0.3}
                               />
                               <stop
                                 offset="95%"
-                                stopColor="#3b82f6"
+                                stopColor={chartColors.primary}
                                 stopOpacity={0}
                               />
                             </linearGradient>
                           </defs>
                           <CartesianGrid
                             strokeDasharray="3 3"
-                            stroke="#1e293b"
+                            stroke={chartColors.gridStroke}
                           />
                           <XAxis
                             dataKey="date"
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             fontSize={10}
                             tickFormatter={(v) =>
                               new Date(v).toLocaleDateString("en-IN", {
@@ -571,13 +565,9 @@ export default function SignalsPage() {
                               })
                             }
                           />
-                          <YAxis stroke="#94a3b8" fontSize={12} />
+                          <YAxis stroke={chartColors.axisStroke} fontSize={12} />
                           <Tooltip
-                            contentStyle={{
-                              backgroundColor: "#141826",
-                              border: "1px solid #1e293b",
-                              borderRadius: "8px",
-                            }}
+                            {...CHART_TOOLTIP_STYLE}
                             labelFormatter={(v) =>
                               new Date(v).toLocaleDateString("en-IN")
                             }
@@ -585,7 +575,7 @@ export default function SignalsPage() {
                           <Area
                             type="monotone"
                             dataKey="close"
-                            stroke="#3b82f6"
+                            stroke={chartColors.primary}
                             fill="url(#colorPrice)"
                             strokeWidth={2}
                           />
@@ -606,22 +596,22 @@ export default function SignalsPage() {
                     <div className="h-72">
                       <ResponsiveContainer width="100%" height="100%">
                         <RadarChart data={radarData}>
-                          <PolarGrid stroke="#1e293b" />
+                          <PolarGrid stroke={chartColors.gridStroke} />
                           <PolarAngleAxis
                             dataKey="metric"
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             fontSize={11}
                           />
                           <PolarRadiusAxis
-                            stroke="#1e293b"
+                            stroke={chartColors.gridStroke}
                             fontSize={10}
                             domain={[0, 100]}
                           />
                           <Radar
                             name="Score"
                             dataKey="value"
-                            stroke="#3b82f6"
-                            fill="#3b82f6"
+                            stroke={chartColors.primary}
+                            fill={chartColors.primary}
                             fillOpacity={0.2}
                             strokeWidth={2}
                           />
@@ -740,27 +730,23 @@ export default function SignalsPage() {
                       <BarChart data={phasePassRates}>
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#1e293b"
+                          stroke={chartColors.gridStroke}
                         />
                         <XAxis
                           dataKey="phase"
-                          stroke="#94a3b8"
+                          stroke={chartColors.axisStroke}
                           fontSize={12}
                         />
-                        <YAxis stroke="#94a3b8" fontSize={12} />
+                        <YAxis stroke={chartColors.axisStroke} fontSize={12} />
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#141826",
-                            border: "1px solid #1e293b",
-                            borderRadius: "8px",
-                          }}
+                          {...CHART_TOOLTIP_STYLE}
                         />
                         <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
                           {phasePassRates.map((_, index) => (
                             <Cell
                               key={`cell-${index}`}
                               fill={
-                                ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#ef4444"][
+                                [chartColors.primary, chartColors.accent, chartColors.warning, chartColors.purple, chartColors.pink, chartColors.destructive][
                                   index
                                 ]
                               }
@@ -976,12 +962,12 @@ export default function SignalsPage() {
                           <Badge
                             className={`text-[10px] ${
                               backtestAnalytics.strategySummary.overallVerdict === "Promising"
-                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
                                 : backtestAnalytics.strategySummary.overallVerdict === "Mixed"
-                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
                                   : backtestAnalytics.strategySummary.overallVerdict === "Underperforming"
-                                    ? "bg-red-500/15 text-red-400 border-red-500/30"
-                                    : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                    ? "bg-red-500/20 text-red-400 border-red-500/40"
+                                    : "bg-blue-500/20 text-blue-400 border-blue-500/40"
                             }`}
                           >
                             {backtestAnalytics.strategySummary.overallVerdict}
@@ -1023,13 +1009,13 @@ export default function SignalsPage() {
                               }))}
                               layout="vertical"
                             >
-                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                              <XAxis type="number" stroke="#94a3b8" fontSize={12} domain={[0, 100]} />
-                              <YAxis type="category" dataKey="signal" stroke="#94a3b8" fontSize={11} width={100} />
+                              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
+                              <XAxis type="number" stroke={chartColors.axisStroke} fontSize={12} domain={[0, 100]} />
+                              <YAxis type="category" dataKey="signal" stroke={chartColors.axisStroke} fontSize={11} width={100} />
                               <Tooltip {...CHART_TOOLTIP_STYLE} />
                               <Bar dataKey="winRate" radius={[0, 4, 4, 0]}>
                                 {perfAnalytics.winRateBySignal.map((w, i) => (
-                                  <Cell key={`wr-${i}`} fill={w.winRate >= 50 ? "#10b981" : "#ef4444"} />
+                                  <Cell key={`wr-${i}`} fill={w.winRate >= 50 ? chartColors.accent : chartColors.destructive} />
                                 ))}
                               </Bar>
                             </BarChart>
@@ -1102,9 +1088,9 @@ export default function SignalsPage() {
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={avgReturnChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="signal" stroke="#94a3b8" fontSize={11} />
-                            <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `${v}%`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
+                            <XAxis dataKey="signal" stroke={chartColors.axisStroke} fontSize={11} />
+                            <YAxis stroke={chartColors.axisStroke} fontSize={12} tickFormatter={(v) => `${v}%`} />
                             <Tooltip
                               {...CHART_TOOLTIP_STYLE}
                               formatter={(value) => [`${Number(value ?? 0).toFixed(2)}%`]}
@@ -1151,9 +1137,9 @@ export default function SignalsPage() {
                                 "10D": t.avgReturn10d ?? 0,
                               }))}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis dataKey="tier" stroke="#94a3b8" fontSize={11} />
-                            <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `${v}%`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
+                            <XAxis dataKey="tier" stroke={chartColors.axisStroke} fontSize={11} />
+                            <YAxis stroke={chartColors.axisStroke} fontSize={12} tickFormatter={(v) => `${v}%`} />
                             <Tooltip
                               {...CHART_TOOLTIP_STYLE}
                               formatter={(value) => [`${Number(value ?? 0).toFixed(2)}%`]}
@@ -1231,10 +1217,10 @@ export default function SignalsPage() {
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={perfAnalytics.accuracyTrend}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
                             <XAxis
                               dataKey="weekStart"
-                              stroke="#94a3b8"
+                              stroke={chartColors.axisStroke}
                               fontSize={10}
                               tickFormatter={(v) =>
                                 new Date(v).toLocaleDateString("en-IN", {
@@ -1243,7 +1229,7 @@ export default function SignalsPage() {
                                 })
                               }
                             />
-                            <YAxis stroke="#94a3b8" fontSize={12} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                            <YAxis stroke={chartColors.axisStroke} fontSize={12} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
                             <Tooltip
                               {...CHART_TOOLTIP_STYLE}
                               formatter={(value) => [`${Number(value ?? 0).toFixed(1)}%`, "Win Rate"]}
@@ -1254,9 +1240,9 @@ export default function SignalsPage() {
                             <Line
                               type="monotone"
                               dataKey="winRate"
-                              stroke="#3b82f6"
+                              stroke={chartColors.primary}
                               strokeWidth={2}
-                              dot={{ r: 4, fill: "#3b82f6" }}
+                              dot={{ r: 4, fill: chartColors.primary }}
                               activeDot={{ r: 6 }}
                             />
                           </LineChart>
@@ -1303,9 +1289,9 @@ export default function SignalsPage() {
                                       <Badge
                                         className={`text-[10px] ${
                                           s.signal === "STRONG_BUY"
-                                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
                                             : s.signal === "BUY"
-                                              ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                              ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
                                               : ""
                                         }`}
                                       >

@@ -236,10 +236,10 @@ const GLOSSARY_ENTRIES: GlossaryEntry[] = [
 const CATEGORIES: GlossaryCategory[] = ["General", "Indicator", "Risk", "Strategy"];
 
 const CATEGORY_COLORS: Record<GlossaryCategory, string> = {
-  General: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  Indicator: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-  Risk: "bg-red-500/10 text-red-500 border-red-500/20",
-  Strategy: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  General: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+  Indicator: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  Risk: "bg-red-500/15 text-red-500 border-red-500/30",
+  Strategy: "bg-purple-500/15 text-purple-500 border-purple-500/30",
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────

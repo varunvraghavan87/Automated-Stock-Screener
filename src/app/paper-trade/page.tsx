@@ -57,26 +57,12 @@ import {
 } from "@/lib/portfolio-analytics";
 import { computeRebalanceAlerts } from "@/lib/rebalancing";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
+import { useChartColors } from "@/hooks/useChartColors";
 import type { PaperTrade, DivergenceResult, MonthlyReturn } from "@/lib/types";
-
-// ---- Chart Constants (matching signals page dark theme) ----
-
-const CHART_TOOLTIP_STYLE = {
-  contentStyle: {
-    backgroundColor: "#141826",
-    border: "1px solid #1e293b",
-    borderRadius: "8px",
-  },
-};
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-const SECTOR_COLORS = [
-  "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444",
-  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
 ];
 
 // ---- Monthly Returns Heatmap Component ----
@@ -96,9 +82,9 @@ function MonthlyReturnsHeatmap({ data }: { data: MonthlyReturn[] }) {
   function cellColor(returnPercent: number): string {
     if (returnPercent > 5) return "bg-green-600/80 text-white";
     if (returnPercent > 2) return "bg-green-500/60 text-white";
-    if (returnPercent > 0) return "bg-green-400/30 text-green-300";
+    if (returnPercent > 0) return "bg-green-400/30 text-green-800 dark:text-green-300";
     if (returnPercent === 0) return "bg-muted/30 text-muted-foreground";
-    if (returnPercent > -2) return "bg-red-400/30 text-red-300";
+    if (returnPercent > -2) return "bg-red-400/30 text-red-800 dark:text-red-300";
     if (returnPercent > -5) return "bg-red-500/60 text-white";
     return "bg-red-600/80 text-white";
   }
@@ -168,6 +154,19 @@ export default function PaperTradePage() {
 
   const { lastUpdate, updating, marketOpen, triggerUpdate } = usePriceUpdate();
   const { results: screenerResults, lastRefresh } = useScreenerData();
+  const chartColors = useChartColors();
+
+  const CHART_TOOLTIP_STYLE = {
+    contentStyle: {
+      backgroundColor: chartColors.tooltipBg,
+      border: `1px solid ${chartColors.tooltipBorder}`,
+      borderRadius: "8px",
+    },
+  };
+  const SECTOR_COLORS = [
+    chartColors.accent, chartColors.primary, chartColors.warning, chartColors.purple, chartColors.destructive,
+    chartColors.cyan, chartColors.pink, chartColors.lime, chartColors.orange, chartColors.indigo,
+  ];
 
   // Build a map of symbols with bearish divergences (for warning badges on open trades)
   const bearishDivergenceMap = useMemo(() => {
@@ -423,7 +422,7 @@ export default function PaperTradePage() {
                             </Badge>
                           )}
                           {rebalanceResult.summary.warningCount > 0 && (
-                            <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/30">
+                            <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/40">
                               {rebalanceResult.summary.warningCount} Warning
                             </Badge>
                           )}
@@ -503,8 +502,8 @@ export default function PaperTradePage() {
                                         <Badge
                                           className={`text-[10px] ${
                                             flag.severity === "critical"
-                                              ? "bg-red-500/15 text-red-400 border-red-500/30"
-                                              : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                              ? "bg-red-500/20 text-red-400 border-red-500/40"
+                                              : "bg-amber-500/20 text-amber-400 border-amber-500/40"
                                           }`}
                                         >
                                           {flag.label}
@@ -1089,23 +1088,23 @@ export default function PaperTradePage() {
                             >
                               <stop
                                 offset="5%"
-                                stopColor="#10b981"
+                                stopColor={chartColors.accent}
                                 stopOpacity={0.3}
                               />
                               <stop
                                 offset="95%"
-                                stopColor="#10b981"
+                                stopColor={chartColors.accent}
                                 stopOpacity={0}
                               />
                             </linearGradient>
                           </defs>
                           <CartesianGrid
                             strokeDasharray="3 3"
-                            stroke="#1e293b"
+                            stroke={chartColors.gridStroke}
                           />
                           <XAxis
                             dataKey="date"
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             fontSize={10}
                             tickFormatter={(v) =>
                               new Date(v).toLocaleDateString("en-IN", {
@@ -1114,7 +1113,7 @@ export default function PaperTradePage() {
                               })
                             }
                           />
-                          <YAxis stroke="#94a3b8" fontSize={12} />
+                          <YAxis stroke={chartColors.axisStroke} fontSize={12} />
                           <RechartsTooltip
                             {...CHART_TOOLTIP_STYLE}
                             labelFormatter={(v) =>
@@ -1127,19 +1126,19 @@ export default function PaperTradePage() {
                           />
                           <ReferenceLine
                             y={100000}
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             strokeDasharray="3 3"
                             label={{
                               value: "Starting Capital",
                               position: "right",
-                              fill: "#94a3b8",
+                              fill: chartColors.axisStroke,
                               fontSize: 10,
                             }}
                           />
                           <Area
                             type="monotone"
                             dataKey="equity"
-                            stroke="#10b981"
+                            stroke={chartColors.accent}
                             fill="url(#equityGradient)"
                             strokeWidth={2}
                           />
@@ -1167,23 +1166,23 @@ export default function PaperTradePage() {
                             >
                               <stop
                                 offset="5%"
-                                stopColor="#ef4444"
+                                stopColor={chartColors.destructive}
                                 stopOpacity={0.4}
                               />
                               <stop
                                 offset="95%"
-                                stopColor="#ef4444"
+                                stopColor={chartColors.destructive}
                                 stopOpacity={0}
                               />
                             </linearGradient>
                           </defs>
                           <CartesianGrid
                             strokeDasharray="3 3"
-                            stroke="#1e293b"
+                            stroke={chartColors.gridStroke}
                           />
                           <XAxis
                             dataKey="date"
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             fontSize={10}
                             tickFormatter={(v) =>
                               new Date(v).toLocaleDateString("en-IN", {
@@ -1193,7 +1192,7 @@ export default function PaperTradePage() {
                             }
                           />
                           <YAxis
-                            stroke="#94a3b8"
+                            stroke={chartColors.axisStroke}
                             fontSize={12}
                             tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
                           />
@@ -1207,11 +1206,11 @@ export default function PaperTradePage() {
                               "Drawdown",
                             ]}
                           />
-                          <ReferenceLine y={0} stroke="#94a3b8" />
+                          <ReferenceLine y={0} stroke={chartColors.axisStroke} />
                           <Area
                             type="monotone"
                             dataKey="drawdown"
-                            stroke="#ef4444"
+                            stroke={chartColors.destructive}
                             fill="url(#drawdownGradient)"
                             strokeWidth={2}
                           />
@@ -1252,11 +1251,11 @@ export default function PaperTradePage() {
                             >
                               <CartesianGrid
                                 strokeDasharray="3 3"
-                                stroke="#1e293b"
+                                stroke={chartColors.gridStroke}
                               />
                               <XAxis
                                 type="number"
-                                stroke="#94a3b8"
+                                stroke={chartColors.axisStroke}
                                 fontSize={12}
                                 domain={[0, 100]}
                                 tickFormatter={(v) => `${v}%`}
@@ -1264,7 +1263,7 @@ export default function PaperTradePage() {
                               <YAxis
                                 type="category"
                                 dataKey="group"
-                                stroke="#94a3b8"
+                                stroke={chartColors.axisStroke}
                                 fontSize={11}
                                 width={100}
                               />
@@ -1282,8 +1281,8 @@ export default function PaperTradePage() {
                                       key={`cell-${index}`}
                                       fill={
                                         entry.winRate >= 50
-                                          ? "#10b981"
-                                          : "#ef4444"
+                                          ? chartColors.accent
+                                          : chartColors.destructive
                                       }
                                     />
                                   )
