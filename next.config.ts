@@ -32,7 +32,7 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://*.supabase.co https://*.googleusercontent.com",
-      "font-src 'self'",
+      "font-src 'self' data:",
       "connect-src 'self' https://api.kite.trade https://*.supabase.co",
       "frame-ancestors 'none'",
       "base-uri 'self'",

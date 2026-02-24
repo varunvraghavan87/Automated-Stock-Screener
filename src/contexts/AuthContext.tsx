@@ -63,11 +63,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Fetch user profile via server API (avoids browser-side RLS issues)
         if (initialSession?.user) {
-          const res = await fetch("/api/auth/profile");
-          if (res.ok) {
-            const profile = await res.json();
-            setRole(profile.role);
-            setApprovalStatus(profile.approvalStatus);
+          try {
+            const res = await fetch("/api/auth/profile", {
+              credentials: "same-origin",
+            });
+            if (res.ok) {
+              const profile = await res.json();
+              setRole(profile.role);
+              setApprovalStatus(profile.approvalStatus);
+            }
+          } catch (profileError) {
+            console.error("Failed to fetch profile:", profileError);
           }
         }
       } catch (error) {
@@ -86,11 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
-        const res = await fetch("/api/auth/profile");
-        if (res.ok) {
-          const profile = await res.json();
-          setRole(profile.role);
-          setApprovalStatus(profile.approvalStatus);
+        try {
+          const res = await fetch("/api/auth/profile", {
+            credentials: "same-origin",
+          });
+          if (res.ok) {
+            const profile = await res.json();
+            setRole(profile.role);
+            setApprovalStatus(profile.approvalStatus);
+          }
+        } catch (profileError) {
+          console.error("Failed to fetch profile:", profileError);
         }
       } else {
         setRole(null);
