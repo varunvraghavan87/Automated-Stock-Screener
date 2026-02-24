@@ -61,15 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
 
-        // Fetch user profile for role and approval status
+        // Fetch user profile via server API (avoids browser-side RLS issues)
         if (initialSession?.user) {
-          const { data: profile } = await supabase
-            .from("user_profiles")
-            .select("role, approval_status")
-            .eq("user_id", initialSession.user.id)
-            .single();
-          setRole(profile?.role ?? null);
-          setApprovalStatus(profile?.approval_status ?? null);
+          const res = await fetch("/api/auth/profile");
+          if (res.ok) {
+            const profile = await res.json();
+            setRole(profile.role);
+            setApprovalStatus(profile.approvalStatus);
+          }
         }
       } catch (error) {
         console.error("Error getting initial session:", error);
@@ -87,13 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("role, approval_status")
-          .eq("user_id", newSession.user.id)
-          .single();
-        setRole(profile?.role ?? null);
-        setApprovalStatus(profile?.approval_status ?? null);
+        const res = await fetch("/api/auth/profile");
+        if (res.ok) {
+          const profile = await res.json();
+          setRole(profile.role);
+          setApprovalStatus(profile.approvalStatus);
+        }
       } else {
         setRole(null);
         setApprovalStatus(null);
