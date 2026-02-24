@@ -1,24 +1,34 @@
 // GET /api/kite/auth — Initiates Kite Connect OAuth login
+// Reads the user's API key from DB and redirects to Kite login page
 // Generates CSRF state token and stores in cookie for callback validation
 
 import { NextResponse } from "next/server";
 import { getKiteLoginURL } from "@/lib/kite-session";
+import { getUserKiteCredentials } from "@/lib/kite-credentials";
 import { cookies } from "next/headers";
 
 export async function GET() {
-  const apiKey = process.env.KITE_API_KEY;
+  // Get the user's stored API key from database
+  const credentials = await getUserKiteCredentials();
 
-  if (!apiKey) {
+  if (!credentials) {
     return NextResponse.json(
-      { error: "Kite Connect is not configured on this server" },
-      { status: 500 }
+      {
+        error:
+          "No Kite API credentials configured. Please add them in Settings.",
+      },
+      { status: 400 }
     );
   }
+
+  const apiKey = credentials.apiKey;
 
   // Generate a CSRF state token for OAuth callback validation
   const stateBytes = new Uint8Array(32);
   crypto.getRandomValues(stateBytes);
-  const state = Array.from(stateBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const state = Array.from(stateBytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 
   // Store state in HTTP-only cookie for validation in callback
   const cookieStore = await cookies();

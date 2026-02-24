@@ -98,3 +98,20 @@ export const MAX_PRICE_UPDATE_SYMBOLS = 500;
 export const MAX_SNAPSHOTS_PER_USER = 270;    // ~90 days * 3 runs/day
 export const MAX_SIGNALS_PER_SNAPSHOT = 50;
 export const SNAPSHOT_RETENTION_DAYS = 90;
+
+// ─── Kite Credentials Schema ──────────────────────────────────────────
+
+export const KiteCredentialsSchema = z
+  .object({
+    apiKey: z
+      .string()
+      .min(4, "API Key must be at least 4 characters")
+      .max(40, "API Key must be at most 40 characters")
+      .regex(/^[a-zA-Z0-9]+$/, "API Key must be alphanumeric"),
+    apiSecret: z
+      .string()
+      .min(4, "API Secret must be at least 4 characters")
+      .max(60, "API Secret must be at most 60 characters")
+      .regex(/^[a-zA-Z0-9]+$/, "API Secret must be alphanumeric"),
+  })
+  .strict();

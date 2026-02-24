@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { exchangeToken, storeSession } from "@/lib/kite-session";
+import { getUserKiteCredentials } from "@/lib/kite-credentials";
 import { cookies } from "next/headers";
 
 const FLASH_COOKIE_OPTIONS = {
@@ -43,13 +44,19 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${baseUrl}/screener`);
   }
 
-  const apiKey = process.env.KITE_API_KEY;
-  const apiSecret = process.env.KITE_API_SECRET;
+  // Look up user's Kite credentials from database
+  const credentials = await getUserKiteCredentials();
 
-  if (!apiKey || !apiSecret) {
-    cookieStore.set("kite_flash_error", "Server configuration error", FLASH_COOKIE_OPTIONS);
+  if (!credentials) {
+    cookieStore.set(
+      "kite_flash_error",
+      "No API credentials found. Please re-enter them in Settings.",
+      FLASH_COOKIE_OPTIONS
+    );
     return NextResponse.redirect(`${baseUrl}/screener`);
   }
+
+  const { apiKey, apiSecret } = credentials;
 
   try {
     // Exchange request_token for access_token

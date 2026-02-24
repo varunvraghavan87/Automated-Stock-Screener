@@ -1,13 +1,15 @@
 // GET /api/kite/status — Check if user has an active Kite session
-// Requires authentication to prevent server configuration info leakage.
+// Also reports whether the user has API credentials configured in the database.
+// Requires authentication to prevent information leakage.
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/kite-session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { checkUserHasCredentials } from "@/lib/kite-credentials";
 
 export async function GET() {
   // Require authentication — prevents unauthenticated callers from
-  // discovering whether Kite API is configured on this server.
+  // discovering whether a user has Kite credentials configured.
   const supabase = await createServerSupabaseClient();
   if (supabase) {
     const {
@@ -20,10 +22,13 @@ export async function GET() {
 
   const session = await getSession();
 
+  // Check if user has API credentials stored in the database
+  const { hasCredentials } = await checkUserHasCredentials();
+
   if (!session) {
     return NextResponse.json({
       connected: false,
-      configured: !!process.env.KITE_API_KEY,
+      configured: hasCredentials,
     });
   }
 

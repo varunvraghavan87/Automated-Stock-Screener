@@ -53,6 +53,7 @@ import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { PaperBuyDialog } from "@/components/trade-actions/PaperBuyDialog";
 import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
+import { KiteCredentialsDialog } from "@/components/kite/KiteCredentialsDialog";
 
 export default function ScreenerPage() {
   const [config, setConfig] = useState<ScreenerConfig>(DEFAULT_SCREENER_CONFIG);
@@ -73,7 +74,10 @@ export default function ScreenerPage() {
     marketRegime,
     adaptiveThresholds,
     previousSignals,
+    showCredentialsDialog,
+    setShowCredentialsDialog,
     refresh,
+    checkKiteStatus,
     connectKite,
     disconnectKite,
   } = useScreenerData();
@@ -165,24 +169,51 @@ export default function ScreenerPage() {
                       ? "Session active — expires at 6:00 AM IST"
                       : kiteStatus.configured
                         ? "Click Connect to authenticate with Zerodha"
-                        : "Set KITE_API_KEY and KITE_API_SECRET env vars to enable"}
+                        : "Add your Kite API credentials to enable live data"}
                   </p>
                 </div>
               </div>
-              {kiteStatus.configured && (
+              <div className="flex items-center gap-2">
+                {kiteStatus.configured && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCredentialsDialog(true)}
+                  >
+                    <Settings2 className="w-4 h-4 mr-1" />
+                    Settings
+                  </Button>
+                )}
                 <Button
                   variant={kiteStatus.connected ? "outline" : "default"}
                   size="sm"
                   onClick={
-                    kiteStatus.connected ? disconnectKite : connectKite
+                    kiteStatus.connected
+                      ? disconnectKite
+                      : kiteStatus.configured
+                        ? connectKite
+                        : () => setShowCredentialsDialog(true)
                   }
                 >
-                  {kiteStatus.connected ? "Disconnect" : "Connect to Kite"}
+                  {kiteStatus.connected
+                    ? "Disconnect"
+                    : kiteStatus.configured
+                      ? "Connect to Kite"
+                      : "Setup Kite"}
                 </Button>
-              )}
+              </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Kite Credentials Dialog */}
+        <KiteCredentialsDialog
+          open={showCredentialsDialog}
+          onOpenChange={setShowCredentialsDialog}
+          onSaved={() => {
+            checkKiteStatus();
+          }}
+        />
 
         {/* Market Regime Banner */}
         <MarketRegimeBanner regime={marketRegime} thresholds={adaptiveThresholds} />

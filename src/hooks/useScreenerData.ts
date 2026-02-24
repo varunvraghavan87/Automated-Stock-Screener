@@ -27,6 +27,8 @@ export interface UseScreenerDataReturn {
   adaptiveThresholds: AdaptiveThresholds;
   sectorRankings: SectorRankings;
   previousSignals: PreviousSignalMap;
+  showCredentialsDialog: boolean;
+  setShowCredentialsDialog: (show: boolean) => void;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;

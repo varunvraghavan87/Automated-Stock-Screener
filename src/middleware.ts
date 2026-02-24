@@ -31,7 +31,11 @@ export async function middleware(request: NextRequest) {
   // Applied before auth checks so that brute-force attacks are blocked early.
 
   // Auth endpoints: login, register, password reset, Kite OAuth initiation
-  if (pathname.startsWith("/auth/") || pathname === "/api/kite/auth") {
+  if (
+    pathname.startsWith("/auth/") ||
+    pathname === "/api/kite/auth" ||
+    pathname === "/api/kite/credentials"
+  ) {
     const result = checkRateLimit(`auth:${ip}`, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS);
     if (!result.allowed) {
       return NextResponse.json(

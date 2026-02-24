@@ -43,6 +43,8 @@ interface ScreenerContextValue {
   adaptiveThresholds: AdaptiveThresholds;
   sectorRankings: SectorRankings;
   previousSignals: PreviousSignalMap;
+  showCredentialsDialog: boolean;
+  setShowCredentialsDialog: (show: boolean) => void;
   refresh: (config?: Partial<ScreenerConfig>) => Promise<void>;
   checkKiteStatus: () => Promise<void>;
   connectKite: () => void;
@@ -184,6 +186,7 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
   const [previousSignals, setPreviousSignals] = useState<PreviousSignalMap>(
     cachedState.current?.previousSignals ?? {}
   );
+  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
 
   // Track whether we've already done the initial auto-refresh
   const hasAutoRefreshed = useRef(false);
@@ -313,10 +316,14 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Redirect to Kite OAuth login
+  // Connect to Kite: if credentials exist, start OAuth; otherwise open setup dialog
   const connectKite = useCallback(() => {
-    window.location.href = "/api/kite/auth";
-  }, []);
+    if (!kiteStatus.configured) {
+      setShowCredentialsDialog(true);
+    } else {
+      window.location.href = "/api/kite/auth";
+    }
+  }, [kiteStatus.configured]);
 
   // Disconnect from Kite — revert to demo data
   const disconnectKite = useCallback(async () => {
@@ -351,6 +358,8 @@ export function ScreenerProvider({ children }: { children: ReactNode }) {
         adaptiveThresholds,
         sectorRankings,
         previousSignals,
+        showCredentialsDialog,
+        setShowCredentialsDialog,
         refresh,
         checkKiteStatus,
         connectKite,
