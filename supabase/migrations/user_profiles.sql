@@ -24,21 +24,33 @@ CREATE INDEX idx_user_profiles_approval_status ON user_profiles(approval_status)
 
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
+-- Helper: check if the current user is an admin.
+-- Uses SECURITY DEFINER to bypass RLS and avoid infinite recursion
+-- (a policy on user_profiles cannot safely query user_profiles itself).
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM user_profiles
+    WHERE user_id = auth.uid()
+    AND role = 'admin'
+  );
+END;
+$$;
+
 -- Users can read their own profile
 CREATE POLICY "Users can view own profile"
   ON user_profiles FOR SELECT
   USING (auth.uid() = user_id);
 
--- Admins can read all profiles
+-- Admins can read all profiles (uses SECURITY DEFINER function to avoid recursion)
 CREATE POLICY "Admins can view all profiles"
   ON user_profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles AS admin_check
-      WHERE admin_check.user_id = auth.uid()
-      AND admin_check.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 -- Users can insert their own row (safety backup for trigger)
 CREATE POLICY "Users can insert own profile"
@@ -48,13 +60,7 @@ CREATE POLICY "Users can insert own profile"
 -- Admins can update any profile (for approve/reject)
 CREATE POLICY "Admins can update profiles"
   ON user_profiles FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles AS admin_check
-      WHERE admin_check.user_id = auth.uid()
-      AND admin_check.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 -- ─── Auto-insert trigger on auth.users ──────────────────────────────────
 -- Catches both email/password and Google OAuth signups.
