@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSortable } from "@/hooks/useSortable";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -51,6 +53,21 @@ export default function WatchlistPage() {
     });
     setEditingId(null);
   };
+
+  const itemsWithChange = useMemo(
+    () =>
+      items.map((item) => ({
+        ...item,
+        _currentPrice: item.currentPrice ?? item.addedPrice,
+        _changePercent:
+          item.addedPrice > 0
+            ? (((item.currentPrice ?? item.addedPrice) - item.addedPrice) / item.addedPrice) * 100
+            : 0,
+      })),
+    [items]
+  );
+  const { sortedData: sortedItems, requestSort, getSortIndicator } =
+    useSortable(itemsWithChange);
 
   return (
     <div className="min-h-screen bg-background">
@@ -111,17 +128,17 @@ export default function WatchlistPage() {
         ) : (
           <div className="space-y-2">
             {/* Table header */}
-            <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-muted-foreground font-medium uppercase">
-              <div className="col-span-2">Symbol</div>
-              <div className="col-span-1 text-right">Added</div>
-              <div className="col-span-2 text-right">Current</div>
-              <div className="col-span-2 text-right">Change</div>
-              <div className="col-span-1 text-right">Buy Target</div>
-              <div className="col-span-1 text-right">Sell Target</div>
-              <div className="col-span-3 text-right">Actions</div>
+            <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium uppercase">
+              <div className="col-span-2"><SortableHeader label="Symbol" sortKey="symbol" sortIndicator={getSortIndicator("symbol")} onSort={requestSort} className="text-xs" /></div>
+              <div className="col-span-1 text-right"><SortableHeader label="Added" sortKey="addedPrice" sortIndicator={getSortIndicator("addedPrice")} onSort={requestSort} className="text-xs justify-end" /></div>
+              <div className="col-span-2 text-right"><SortableHeader label="Current" sortKey="_currentPrice" sortIndicator={getSortIndicator("_currentPrice")} onSort={requestSort} className="text-xs justify-end" /></div>
+              <div className="col-span-2 text-right"><SortableHeader label="Change" sortKey="_changePercent" sortIndicator={getSortIndicator("_changePercent")} onSort={requestSort} className="text-xs justify-end" /></div>
+              <div className="col-span-1 text-right text-muted-foreground">Buy Target</div>
+              <div className="col-span-1 text-right text-muted-foreground">Sell Target</div>
+              <div className="col-span-3 text-right text-muted-foreground">Actions</div>
             </div>
 
-            {items.map((item) => {
+            {sortedItems.map((item) => {
               const currentPrice = item.currentPrice ?? item.addedPrice;
               const changeSinceAdded = currentPrice - item.addedPrice;
               const changePercent =

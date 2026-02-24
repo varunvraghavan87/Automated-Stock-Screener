@@ -744,5 +744,13 @@ export function runScreener(
   }
 
   results.sort((a, b) => b.overallScore - a.overallScore);
-  return results;
+
+  // Deduplicate by symbol — keep the first (highest-scoring) entry
+  const seen = new Set<string>();
+  const deduped = results.filter((r) => {
+    if (seen.has(r.stock.symbol)) return false;
+    seen.add(r.stock.symbol);
+    return true;
+  });
+  return deduped;
 }

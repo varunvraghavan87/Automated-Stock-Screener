@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSortable } from "@/hooks/useSortable";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -98,6 +100,9 @@ export default function ScreenerPage() {
     }
     return list;
   }, [results, search, signalFilter]);
+
+  const { sortedData: sortedFiltered, requestSort, getSortIndicator } =
+    useSortable(filtered, { key: "overallScore", direction: "desc" });
 
   return (
     <div className="min-h-screen bg-background">
@@ -528,9 +533,20 @@ export default function ScreenerPage() {
           </p>
         </div>
 
+        {/* Sort Bar */}
+        <div className="hidden md:flex items-center gap-6 px-4 py-2 mb-2 rounded-lg bg-secondary/30 border border-border/50">
+          <span className="text-xs text-muted-foreground font-medium mr-1">Sort by:</span>
+          <SortableHeader label="Score" sortKey="overallScore" sortIndicator={getSortIndicator("overallScore")} onSort={requestSort} />
+          <SortableHeader label="Symbol" sortKey="stock.symbol" sortIndicator={getSortIndicator("stock.symbol")} onSort={requestSort} />
+          <SortableHeader label="Price" sortKey="stock.lastPrice" sortIndicator={getSortIndicator("stock.lastPrice")} onSort={requestSort} />
+          <SortableHeader label="Change %" sortKey="stock.changePercent" sortIndicator={getSortIndicator("stock.changePercent")} onSort={requestSort} />
+          <SortableHeader label="RSI" sortKey="indicators.rsi14" sortIndicator={getSortIndicator("indicators.rsi14")} onSort={requestSort} />
+          <SortableHeader label="ADX" sortKey="indicators.adx14" sortIndicator={getSortIndicator("indicators.adx14")} onSort={requestSort} />
+        </div>
+
         {/* Results */}
         <div className="space-y-3">
-          {filtered.map((result) => (
+          {sortedFiltered.map((result) => (
             <StockRow
               key={result.stock.symbol}
               result={result}

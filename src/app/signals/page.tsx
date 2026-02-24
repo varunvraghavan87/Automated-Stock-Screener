@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
+import { useSortable } from "@/hooks/useSortable";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -168,6 +170,12 @@ export default function SignalsPage() {
   const topPicks = results.filter(
     (r) => r.signal === "STRONG_BUY" || r.signal === "BUY"
   );
+
+  const { sortedData: sortedRankings, requestSort: requestSortRank, getSortIndicator: getSortIndicatorRank } =
+    useSortable(sectorRankings.rankings, { key: "rank", direction: "asc" });
+
+  const { sortedData: sortedPicks, requestSort: requestSortPicks, getSortIndicator: getSortIndicatorPicks } =
+    useSortable(topPicks, { key: "overallScore", direction: "desc" });
 
   const radarData = useMemo(() => {
     if (topPicks.length === 0) return [];
@@ -467,17 +475,17 @@ export default function SignalsPage() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Rank</th>
-                          <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Sector</th>
-                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Stocks</th>
-                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Avg 3M RS</th>
-                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Breadth</th>
-                          <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Composite</th>
+                          <th className="text-left py-2 px-2"><SortableHeader label="Rank" sortKey="rank" sortIndicator={getSortIndicatorRank("rank")} onSort={requestSortRank} className="text-xs" /></th>
+                          <th className="text-left py-2 px-2"><SortableHeader label="Sector" sortKey="sector" sortIndicator={getSortIndicatorRank("sector")} onSort={requestSortRank} className="text-xs" /></th>
+                          <th className="text-right py-2 px-2"><SortableHeader label="Stocks" sortKey="stockCount" sortIndicator={getSortIndicatorRank("stockCount")} onSort={requestSortRank} className="text-xs justify-end" /></th>
+                          <th className="text-right py-2 px-2"><SortableHeader label="Avg 3M RS" sortKey="avgRelativeStrength3M" sortIndicator={getSortIndicatorRank("avgRelativeStrength3M")} onSort={requestSortRank} className="text-xs justify-end" /></th>
+                          <th className="text-right py-2 px-2"><SortableHeader label="Breadth" sortKey="breadth" sortIndicator={getSortIndicatorRank("breadth")} onSort={requestSortRank} className="text-xs justify-end" /></th>
+                          <th className="text-right py-2 px-2"><SortableHeader label="Composite" sortKey="compositeScore" sortIndicator={getSortIndicatorRank("compositeScore")} onSort={requestSortRank} className="text-xs justify-end" /></th>
                           <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Impact</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {sectorRankings.rankings.map((s) => (
+                        {sortedRankings.map((s) => (
                           <tr key={s.sector} className="border-b border-border/50 hover:bg-secondary/30">
                             <td className="py-2 px-2 font-mono font-bold text-sm">#{s.rank}</td>
                             <td className="py-2 px-2 text-sm">{s.sector}</td>
@@ -638,34 +646,34 @@ export default function SignalsPage() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-border">
-                            <th className="text-left py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Stock
+                            <th className="text-left py-3 px-3">
+                              <SortableHeader label="Stock" sortKey="stock.symbol" sortIndicator={getSortIndicatorPicks("stock.symbol")} onSort={requestSortPicks} />
                             </th>
-                            <th className="text-right py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Price
+                            <th className="text-right py-3 px-3">
+                              <SortableHeader label="Price" sortKey="stock.lastPrice" sortIndicator={getSortIndicatorPicks("stock.lastPrice")} onSort={requestSortPicks} className="justify-end" />
                             </th>
-                            <th className="text-center py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Signal
+                            <th className="text-center py-3 px-3">
+                              <SortableHeader label="Signal" sortKey="signal" sortIndicator={getSortIndicatorPicks("signal")} onSort={requestSortPicks} className="justify-center" />
                             </th>
-                            <th className="text-center py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Score
+                            <th className="text-center py-3 px-3">
+                              <SortableHeader label="Score" sortKey="overallScore" sortIndicator={getSortIndicatorPicks("overallScore")} onSort={requestSortPicks} className="justify-center" />
                             </th>
-                            <th className="text-right py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Entry
+                            <th className="text-right py-3 px-3">
+                              <SortableHeader label="Entry" sortKey="phase6.entryPrice" sortIndicator={getSortIndicatorPicks("phase6.entryPrice")} onSort={requestSortPicks} className="justify-end" />
                             </th>
-                            <th className="text-right py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Stop Loss
+                            <th className="text-right py-3 px-3">
+                              <SortableHeader label="Stop Loss" sortKey="phase6.stopLoss" sortIndicator={getSortIndicatorPicks("phase6.stopLoss")} onSort={requestSortPicks} className="justify-end" />
                             </th>
-                            <th className="text-right py-3 px-3 text-sm font-medium text-muted-foreground">
-                              Target
+                            <th className="text-right py-3 px-3">
+                              <SortableHeader label="Target" sortKey="phase6.target" sortIndicator={getSortIndicatorPicks("phase6.target")} onSort={requestSortPicks} className="justify-end" />
                             </th>
-                            <th className="text-center py-3 px-3 text-sm font-medium text-muted-foreground">
-                              R:R
+                            <th className="text-center py-3 px-3">
+                              <SortableHeader label="R:R" sortKey="phase6.riskRewardRatio" sortIndicator={getSortIndicatorPicks("phase6.riskRewardRatio")} onSort={requestSortPicks} className="justify-center" />
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {topPicks.map((r) => (
+                          {sortedPicks.map((r) => (
                             <tr
                               key={r.stock.symbol}
                               className="border-b border-border/50 hover:bg-secondary/30"

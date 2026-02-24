@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSortable } from "@/hooks/useSortable";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { Navbar } from "@/components/layout/navbar";
 import {
   Card,
@@ -207,6 +209,29 @@ export default function PaperTradePage() {
     () => computePortfolioRisk(openTrades),
     [openTrades]
   );
+
+  // Add derived P&L fields for sorting
+  const openTradesWithPnl = useMemo(
+    () =>
+      openTrades.map((t) => ({
+        ...t,
+        _pnl: ((t.currentPrice ?? t.entryPrice) - t.entryPrice) * t.quantity,
+      })),
+    [openTrades]
+  );
+  const { sortedData: sortedOpen, requestSort: requestSortOpen, getSortIndicator: getSortIndicatorOpen } =
+    useSortable(openTradesWithPnl);
+
+  const closedTradesWithPnl = useMemo(
+    () =>
+      closedTrades.map((t) => ({
+        ...t,
+        _pnl: t.realizedPnl ?? 0,
+      })),
+    [closedTrades]
+  );
+  const { sortedData: sortedClosed, requestSort: requestSortClosed, getSortIndicator: getSortIndicatorClosed } =
+    useSortable(closedTradesWithPnl);
 
   return (
     <div className="min-h-screen bg-background">
@@ -422,17 +447,17 @@ export default function PaperTradePage() {
                 )}
 
                 {/* Table header */}
-                <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-muted-foreground font-medium uppercase">
-                  <div className="col-span-2">Symbol</div>
-                  <div className="col-span-1 text-right">Qty</div>
-                  <div className="col-span-2 text-right">Entry</div>
-                  <div className="col-span-2 text-right">Current</div>
-                  <div className="col-span-2 text-right">P&L</div>
-                  <div className="col-span-1 text-right">SL</div>
-                  <div className="col-span-2 text-right">Actions</div>
+                <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium uppercase">
+                  <div className="col-span-2"><SortableHeader label="Symbol" sortKey="symbol" sortIndicator={getSortIndicatorOpen("symbol")} onSort={requestSortOpen} className="text-xs" /></div>
+                  <div className="col-span-1 text-right"><SortableHeader label="Qty" sortKey="quantity" sortIndicator={getSortIndicatorOpen("quantity")} onSort={requestSortOpen} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="Entry" sortKey="entryPrice" sortIndicator={getSortIndicatorOpen("entryPrice")} onSort={requestSortOpen} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="Current" sortKey="currentPrice" sortIndicator={getSortIndicatorOpen("currentPrice")} onSort={requestSortOpen} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="P&L" sortKey="_pnl" sortIndicator={getSortIndicatorOpen("_pnl")} onSort={requestSortOpen} className="text-xs justify-end" /></div>
+                  <div className="col-span-1 text-right text-muted-foreground">SL</div>
+                  <div className="col-span-2 text-right text-muted-foreground">Actions</div>
                 </div>
 
-                {openTrades.map((trade) => {
+                {sortedOpen.map((trade) => {
                   const currentPrice = trade.currentPrice ?? trade.entryPrice;
                   const pnl =
                     (currentPrice - trade.entryPrice) * trade.quantity;
@@ -574,17 +599,17 @@ export default function PaperTradePage() {
               </Card>
             ) : (
               <div className="space-y-2">
-                <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-muted-foreground font-medium uppercase">
-                  <div className="col-span-2">Symbol</div>
-                  <div className="col-span-1 text-right">Qty</div>
-                  <div className="col-span-2 text-right">Entry</div>
-                  <div className="col-span-2 text-right">Exit</div>
-                  <div className="col-span-2 text-right">P&L</div>
-                  <div className="col-span-2 text-right">Reason</div>
-                  <div className="col-span-1 text-right">Action</div>
+                <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium uppercase">
+                  <div className="col-span-2"><SortableHeader label="Symbol" sortKey="symbol" sortIndicator={getSortIndicatorClosed("symbol")} onSort={requestSortClosed} className="text-xs" /></div>
+                  <div className="col-span-1 text-right"><SortableHeader label="Qty" sortKey="quantity" sortIndicator={getSortIndicatorClosed("quantity")} onSort={requestSortClosed} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="Entry" sortKey="entryPrice" sortIndicator={getSortIndicatorClosed("entryPrice")} onSort={requestSortClosed} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="Exit" sortKey="exitPrice" sortIndicator={getSortIndicatorClosed("exitPrice")} onSort={requestSortClosed} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right"><SortableHeader label="P&L" sortKey="_pnl" sortIndicator={getSortIndicatorClosed("_pnl")} onSort={requestSortClosed} className="text-xs justify-end" /></div>
+                  <div className="col-span-2 text-right text-muted-foreground">Reason</div>
+                  <div className="col-span-1 text-right text-muted-foreground">Action</div>
                 </div>
 
-                {closedTrades.map((trade) => {
+                {sortedClosed.map((trade) => {
                   const pnl = trade.realizedPnl ?? 0;
                   const pnlPercent =
                     trade.entryPrice > 0 && trade.exitPrice

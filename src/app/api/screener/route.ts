@@ -179,7 +179,8 @@ export async function GET() {
         accessToken: session.accessToken,
       });
       const liveService = new LiveDataService(kite);
-      const liveData = await liveService.fetchAndComputeIndicatorsWithRegime(NIFTY_500_SYMBOLS);
+      const uniqueSymbols = [...new Set(NIFTY_500_SYMBOLS)];
+      const liveData = await liveService.fetchAndComputeIndicatorsWithRegime(uniqueSymbols);
       stocks = liveData.stocks;
       marketRegime = liveData.marketRegime;
       mode = "live";
@@ -259,7 +260,7 @@ export async function POST(request: Request) {
     ...validatedConfig,
   };
 
-  const symbols = body.symbols || NIFTY_500_SYMBOLS;
+  const symbols = [...new Set<string>(body.symbols || NIFTY_500_SYMBOLS)];
 
   let stocks = MOCK_STOCKS;
   let mode = "demo";

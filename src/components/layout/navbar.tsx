@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -28,6 +28,37 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { GlossaryDialog } from "@/components/glossary-dialog";
+import { getMarketStatus } from "@/lib/market-hours";
+
+const marketIndicatorStyles: Record<
+  string,
+  { dot: string; text: string; bg: string; border: string }
+> = {
+  "Market Open": {
+    dot: "bg-accent animate-pulse",
+    text: "text-accent",
+    bg: "bg-accent/10",
+    border: "border-accent/20",
+  },
+  "Pre-market": {
+    dot: "bg-amber-500 animate-pulse",
+    text: "text-amber-500",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+  },
+  "Market Closed": {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted/10",
+    border: "border-muted/20",
+  },
+  Weekend: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted/10",
+    border: "border-muted/20",
+  },
+};
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
@@ -43,6 +74,18 @@ export function Navbar() {
   const router = useRouter();
   const { user, role, signOut } = useAuth();
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+  const [marketStatus, setMarketStatus] = useState(getMarketStatus());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMarketStatus(getMarketStatus());
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const indicatorStyle =
+    marketIndicatorStyles[marketStatus.label] ??
+    marketIndicatorStyles["Market Closed"];
 
   const handleSignOut = async () => {
     await signOut();
@@ -100,9 +143,17 @@ export function Navbar() {
             >
               <HelpCircle className="w-4 h-4" />
             </Button>
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20">
-              <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-              <span className="text-xs text-accent font-mono">MARKET OPEN</span>
+            <div
+              className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full ${indicatorStyle.bg} border ${indicatorStyle.border}`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${indicatorStyle.dot}`}
+              />
+              <span
+                className={`text-xs ${indicatorStyle.text} font-mono`}
+              >
+                {marketStatus.label.toUpperCase()}
+              </span>
             </div>
 
             {user && (

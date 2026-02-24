@@ -37,12 +37,17 @@ import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { PaperBuyDialog } from "@/components/trade-actions/PaperBuyDialog";
 import { WatchlistButton } from "@/components/trade-actions/WatchlistButton";
+import { useSortable } from "@/hooks/useSortable";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import type { ScreenerResult, MarketRegimeInfo } from "@/lib/types";
 
 export default function DashboardPage() {
   const { results, mode, loading, lastRefresh, kiteStatus, marketRegime, adaptiveThresholds, refresh } =
     useScreenerData();
   const [buyingStock, setBuyingStock] = useState<ScreenerResult | null>(null);
+  const top10 = results.slice(0, 10);
+  const { sortedData: sortedResults, requestSort, getSortIndicator } =
+    useSortable(top10, { key: "overallScore", direction: "desc" });
 
   const strongBuys = results.filter((r) => r.signal === "STRONG_BUY");
   const buys = results.filter((r) => r.signal === "BUY");
@@ -315,26 +320,26 @@ export default function DashboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
-                      Symbol
+                    <th className="text-left py-3 px-2">
+                      <SortableHeader label="Symbol" sortKey="stock.symbol" sortIndicator={getSortIndicator("stock.symbol")} onSort={requestSort} />
                     </th>
-                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
-                      Price
+                    <th className="text-right py-3 px-2">
+                      <SortableHeader label="Price" sortKey="stock.lastPrice" sortIndicator={getSortIndicator("stock.lastPrice")} onSort={requestSort} className="justify-end" />
                     </th>
-                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
-                      Change
+                    <th className="text-right py-3 px-2">
+                      <SortableHeader label="Change" sortKey="stock.changePercent" sortIndicator={getSortIndicator("stock.changePercent")} onSort={requestSort} className="justify-end" />
                     </th>
-                    <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground">
-                      Signal
+                    <th className="text-center py-3 px-2">
+                      <SortableHeader label="Signal" sortKey="signal" sortIndicator={getSortIndicator("signal")} onSort={requestSort} className="justify-center" />
                     </th>
-                    <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground">
-                      Score
+                    <th className="text-center py-3 px-2">
+                      <SortableHeader label="Score" sortKey="overallScore" sortIndicator={getSortIndicator("overallScore")} onSort={requestSort} className="justify-center" />
                     </th>
-                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground hidden md:table-cell">
-                      RSI
+                    <th className="text-right py-3 px-2 hidden md:table-cell">
+                      <SortableHeader label="RSI" sortKey="indicators.rsi14" sortIndicator={getSortIndicator("indicators.rsi14")} onSort={requestSort} className="justify-end" />
                     </th>
-                    <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground hidden md:table-cell">
-                      ADX
+                    <th className="text-right py-3 px-2 hidden md:table-cell">
+                      <SortableHeader label="ADX" sortKey="indicators.adx14" sortIndicator={getSortIndicator("indicators.adx14")} onSort={requestSort} className="justify-end" />
                     </th>
                     <th className="text-center py-3 px-2 text-sm font-medium text-muted-foreground hidden lg:table-cell">
                       Phases
@@ -345,7 +350,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {results.slice(0, 10).map((result) => (
+                  {sortedResults.map((result) => (
                     <tr
                       key={result.stock.symbol}
                       className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
