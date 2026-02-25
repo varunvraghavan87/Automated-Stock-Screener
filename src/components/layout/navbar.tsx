@@ -103,7 +103,7 @@ export function Navbar() {
   };
 
   const displayName =
-    user?.user_metadata?.name ||
+    (user?.user_metadata?.name as string) ||
     user?.email?.split("@")[0] ||
     "User";
 
@@ -190,7 +190,7 @@ export function Navbar() {
                   >
                     {user.user_metadata?.avatar_url ? (
                       <img
-                        src={user.user_metadata.avatar_url}
+                        src={user.user_metadata.avatar_url as string}
                         alt={displayName}
                         className="w-6 h-6 rounded-full"
                         referrerPolicy="no-referrer"

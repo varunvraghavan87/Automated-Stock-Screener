@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSupabase } from "@/hooks/useSupabase";
 import {
   Card,
   CardContent,
@@ -24,27 +23,27 @@ export default function PendingPage() {
 function PendingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signOut, user } = useAuth();
-  const supabase = useSupabase();
+  const { signOut } = useAuth();
 
   const isRejected = searchParams.get("status") === "rejected";
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
-    if (isRejected && supabase && user) {
-      supabase
-        .from("user_profiles")
-        .select("rejection_reason")
-        .eq("user_id", user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.rejection_reason) {
-            setRejectionReason(data.rejection_reason);
+    if (isRejected) {
+      // Fetch rejection reason from our own API (bypasses ISP DNS blocking)
+      fetch("/api/auth/profile", { credentials: "same-origin" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.rejectionReason) {
+            setRejectionReason(data.rejectionReason);
           }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch rejection reason:", err);
         });
     }
-  }, [isRejected, supabase, user]);
+  }, [isRejected]);
 
   const handleCheckStatus = () => {
     setChecking(true);
