@@ -590,4 +590,4 @@ A: Stop-loss is calculated as Entry Price minus (1.5 x ATR). ATR (Average True R
 
 ---
 
-*This guide is current as of commit `1d8c9af` (2026-02-25). For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*
+*This guide is current as of commit `718e752` (2026-02-25). For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*

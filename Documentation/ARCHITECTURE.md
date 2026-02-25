@@ -488,6 +488,8 @@ Per-user Kite API secrets are encrypted at rest using Web Crypto `AES-GCM`:
 - **Storage**: Base64-encoded `iv + ciphertext + auth_tag` in Supabase `kite_credentials.kite_api_secret_encrypted`
 - Decryption happens only server-side when a Kite API call is needed
 
+**Kite session cookies** are also AES-256-GCM encrypted. The cookie stores `{apiKey, accessToken, userId, loginTime}` — the encrypted payload prevents credential extraction if the cookie is exfiltrated. Falls back to plain JSON for backward compatibility with pre-encryption sessions.
+
 ### Admin Role-Based Access Control
 
 - `user_profiles.role` column: `'user'` (default) or `'admin'`
@@ -495,6 +497,18 @@ Per-user Kite API secrets are encrypted at rest using Web Crypto `AES-GCM`:
 - `SECURITY DEFINER` function `get_user_role()` avoids RLS infinite recursion
 - New users start with `approval_status = 'pending'`; admin must approve before access is granted
 - Middleware redirects unapproved users to `/auth/pending`
+- Approve/reject endpoints validate current status before allowing state transitions (prevents double-approve/reject)
+
+### Security Hardening
+
+Measures added after a comprehensive security audit:
+
+- **Origin validation**: Auth redirect URLs use `request.nextUrl.origin` (server-derived) instead of the user-controlled `Origin` header, preventing phishing via forged email links
+- **No `x-forwarded-host` trust**: Auth callback ignores `x-forwarded-host` header, using the request URL origin directly
+- **Sanitized error messages**: API responses never expose env var names, raw database errors, or Supabase internals — generic messages only, with full details logged server-side
+- **Server-side password complexity**: Admin password reset enforces 8+ chars, uppercase, and number requirements at the API level (not just client-side)
+- **Timing-safe CSRF**: Kite OAuth state comparison uses `crypto.timingSafeEqual` to prevent timing attacks
+- **Query bounds**: Admin user list capped at 500 rows to prevent DoS via unbounded queries
 
 ### Headers (`next.config.ts`)
 
@@ -504,7 +518,7 @@ Per-user Kite API secrets are encrypted at rest using Web Crypto `AES-GCM`:
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
-- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; ...`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; ...`
 
 ### Input Validation (`validation.ts`)
 

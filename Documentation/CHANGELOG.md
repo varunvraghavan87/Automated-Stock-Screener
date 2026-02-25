@@ -8,7 +8,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Commits | 39 |
+| Total Commits | 41 |
 | First Commit | 2026-02-19 |
 | Latest Commit | 2026-02-25 |
 | Total Files | 90+ source files |
@@ -613,6 +613,38 @@ Separated encryption errors from database errors. UI now shows actionable messag
 
 ---
 
+### 40. `d0a8b95` &mdash; 2026-02-25
+
+**Update documentation with 16 new commits (Feb 24-25 features)**
+
+Comprehensive documentation refresh across all 3 doc files. CHANGELOG: 16 new commit entries, updated stats. ARCHITECTURE: server-side auth proxy flow, user_profiles + kite_credentials tables, 14 new API endpoints, updated env vars and security sections. USER-GUIDE: admin approval flow, per-user Kite setup, Admin Panel section, new FAQ entries.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 3 | +474 | -47 |
+
+---
+
+### 41. `718e752` &mdash; 2026-02-25
+
+**Fix security vulnerabilities: open redirects, info leakage, weak validation**
+
+Security hardening across 12 files after a comprehensive audit:
+- **Open redirect fix**: Auth routes no longer trust user-controlled `Origin` header or `x-forwarded-host`; use `request.nextUrl.origin` exclusively
+- **Information leakage**: Error messages no longer expose env var names (`SUPABASE_SERVICE_ROLE_KEY`, `KITE_CREDENTIALS_ENCRYPTION_KEY`) or raw database errors to clients
+- **Password validation**: Admin reset-password API now enforces uppercase + number requirements server-side (not just client-side)
+- **CSP hardening**: Removed `'unsafe-eval'` from `script-src` directive
+- **Session encryption**: Kite session cookie payload encrypted with AES-256-GCM (backward-compatible with legacy sessions)
+- **State transition guards**: Admin approve/reject endpoints validate current status before allowing changes
+- **CSRF timing safety**: Kite OAuth callback uses `crypto.timingSafeEqual` for state comparison
+- **Query safety**: Admin users list capped at 500 rows
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 12 | +91 | -26 |
+
+---
+
 ## Feature Timeline
 
 ```
@@ -655,6 +687,9 @@ Feb 25  [UX]       Light theme + more pronounced indicator colors
         [Infra]    Remove browser Supabase client from auth flow
         [Fix]      JSON parse error on unauthenticated API calls
         [Fix]      Kite credentials error message improvements
+        [Docs]     Full documentation refresh (16 commits, 3 files)
+        [Security] Open redirect fixes, info leakage, CSP hardening,
+                   session encryption, timing-safe CSRF, state guards
 ```
 
 ---
