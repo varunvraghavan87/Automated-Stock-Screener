@@ -143,7 +143,16 @@ export async function storeUserKiteCredentials(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Unauthorized" };
 
-  const encryptedSecret = await encryptSecret(apiSecret);
+  let encryptedSecret: string;
+  try {
+    encryptedSecret = await encryptSecret(apiSecret);
+  } catch (encErr) {
+    console.error("Failed to encrypt Kite API secret:", encErr);
+    return {
+      success: false,
+      error: "Encryption failed — check KITE_CREDENTIALS_ENCRYPTION_KEY env var.",
+    };
+  }
 
   const { error } = await supabase.from("kite_credentials").upsert(
     {
@@ -156,7 +165,10 @@ export async function storeUserKiteCredentials(
 
   if (error) {
     console.error("Failed to store Kite credentials:", error);
-    return { success: false, error: "Failed to save credentials" };
+    return {
+      success: false,
+      error: `Database error: ${error.message}`,
+    };
   }
 
   return { success: true };
