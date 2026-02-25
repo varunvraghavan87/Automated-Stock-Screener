@@ -23,6 +23,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  KeyRound,
 } from "lucide-react";
 
 interface UserProfile {
@@ -50,6 +51,7 @@ export default function AdminPage() {
   const [rejectingUserId, setRejectingUserId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   // Client-side admin guard (defense-in-depth; middleware already blocks)
   useEffect(() => {
@@ -125,6 +127,49 @@ export default function AdminPage() {
     }
   };
 
+  const handleResetPassword = async (userId: string, displayName: string) => {
+    const newPassword = window.prompt(
+      `Enter a new password for ${displayName}.\n\nRequirements:\n• At least 8 characters\n• At least 1 uppercase letter\n• At least 1 number`
+    );
+    if (!newPassword) return;
+
+    // Client-side validation
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setError("Password must contain at least one uppercase letter.");
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setError("Password must contain at least one number.");
+      return;
+    }
+
+    setActionLoading(userId);
+    setError("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to reset password");
+      }
+      setSuccessMsg(`Password reset successfully for ${displayName}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to reset password"
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const filteredUsers = users.filter((u) =>
     filter === "all" ? true : u.approvalStatus === filter
   );
@@ -158,6 +203,12 @@ export default function AdminPage() {
         {error && (
           <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-sm text-destructive">
             {error}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-600 dark:text-emerald-400">
+            {successMsg}
           </div>
         )}
 
@@ -316,6 +367,27 @@ export default function AdminPage() {
                             )}
                           </>
                         )}
+                      {u.role !== "admin" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-500 border-blue-500/30 hover:bg-blue-500/10"
+                          onClick={() =>
+                            handleResetPassword(
+                              u.userId,
+                              u.displayName || u.email
+                            )
+                          }
+                          disabled={actionLoading === u.userId}
+                        >
+                          {actionLoading === u.userId ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-4 h-4 mr-1" />
+                          )}
+                          Reset Password
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
