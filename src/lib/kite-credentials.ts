@@ -150,7 +150,7 @@ export async function storeUserKiteCredentials(
     console.error("Failed to encrypt Kite API secret:", encErr);
     return {
       success: false,
-      error: "Encryption failed — check KITE_CREDENTIALS_ENCRYPTION_KEY env var.",
+      error: "Failed to secure credentials. Please contact support.",
     };
   }
 
@@ -167,7 +167,7 @@ export async function storeUserKiteCredentials(
     console.error("Failed to store Kite credentials:", error);
     return {
       success: false,
-      error: `Database error: ${error.message}`,
+      error: "Failed to save credentials. Please try again.",
     };
   }
 

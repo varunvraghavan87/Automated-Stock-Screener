@@ -3,6 +3,7 @@
 // Errors are stored in a short-lived cookie (not URL params) to avoid leaking info
 
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { exchangeToken, storeSession } from "@/lib/kite-session";
 import { getUserKiteCredentials } from "@/lib/kite-credentials";
 import { cookies } from "next/headers";
@@ -38,7 +39,14 @@ export async function GET(request: Request) {
   // Clean up state cookie regardless of validation result
   cookieStore.delete("kite_oauth_state");
 
-  if (!storedState || !callbackState || storedState !== callbackState) {
+  // Use timing-safe comparison to prevent timing attacks on CSRF state
+  const stateValid =
+    storedState &&
+    callbackState &&
+    storedState.length === callbackState.length &&
+    timingSafeEqual(Buffer.from(storedState), Buffer.from(callbackState));
+
+  if (!stateValid) {
     console.error("Kite OAuth CSRF validation failed: state mismatch");
     cookieStore.set("kite_flash_error", "Authentication failed. Please try again.", FLASH_COOKIE_OPTIONS);
     return NextResponse.redirect(`${baseUrl}/screener`);

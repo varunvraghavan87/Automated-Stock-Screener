@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const origin = request.headers.get("origin") || request.nextUrl.origin;
+    const origin = request.nextUrl.origin;
 
     const { error } = await supabase.auth.signUp({
       email,

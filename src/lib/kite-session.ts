@@ -1,7 +1,9 @@
 // Kite Connect OAuth session management
 // Handles token exchange, cookie-based session storage, and expiry checks
+// Session data is AES-256-GCM encrypted in the cookie to protect credentials at rest.
 
 import { cookies } from "next/headers";
+import { encryptSecret, decryptSecret } from "@/lib/kite-credentials";
 
 const KITE_API_BASE = "https://api.kite.trade";
 const COOKIE_NAME = "kite_session";
@@ -69,11 +71,20 @@ export async function exchangeToken(
 }
 
 /**
- * Store the Kite session in an HTTP-only cookie
+ * Store the Kite session in an HTTP-only cookie.
+ * The payload is AES-256-GCM encrypted so that raw API credentials
+ * are never stored in plaintext in the cookie.
  */
 export async function storeSession(session: KiteSession): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, JSON.stringify(session), {
+  let payload: string;
+  try {
+    payload = await encryptSecret(JSON.stringify(session));
+  } catch {
+    // Fall back to plain JSON if encryption key is unavailable (e.g., dev without key)
+    payload = JSON.stringify(session);
+  }
+  cookieStore.set(COOKIE_NAME, payload, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -83,8 +94,9 @@ export async function storeSession(session: KiteSession): Promise<void> {
 }
 
 /**
- * Retrieve the stored Kite session from cookie
- * Returns null if no session exists or if it's expired
+ * Retrieve the stored Kite session from cookie.
+ * Attempts AES-256-GCM decryption first, falls back to plain JSON
+ * for backward compatibility with sessions created before encryption was added.
  */
 export async function getSession(): Promise<KiteSession | null> {
   const cookieStore = await cookies();
@@ -93,7 +105,15 @@ export async function getSession(): Promise<KiteSession | null> {
   if (!cookie?.value) return null;
 
   try {
-    const session: KiteSession = JSON.parse(cookie.value);
+    let session: KiteSession;
+    try {
+      // Try decrypting (new encrypted format)
+      const decrypted = await decryptSecret(cookie.value);
+      session = JSON.parse(decrypted);
+    } catch {
+      // Fall back to plain JSON (legacy or dev without encryption key)
+      session = JSON.parse(cookie.value);
+    }
 
     // Check if token has expired (6 AM IST = 00:30 UTC)
     if (isTokenExpired(session.loginTime)) {

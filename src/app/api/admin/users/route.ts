@@ -34,7 +34,8 @@ export async function GET() {
   const { data, error } = await supabase
     .from("user_profiles")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error) {
     console.error("Failed to fetch users:", error);

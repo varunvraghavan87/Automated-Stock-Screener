@@ -70,12 +70,24 @@ export async function POST(
       { status: 400 }
     );
   }
+  if (!/[A-Z]/.test(password)) {
+    return NextResponse.json(
+      { error: "Password must contain at least one uppercase letter." },
+      { status: 400 }
+    );
+  }
+  if (!/[0-9]/.test(password)) {
+    return NextResponse.json(
+      { error: "Password must contain at least one number." },
+      { status: 400 }
+    );
+  }
 
   // 6. Create admin client and reset the password
   const adminClient = createSupabaseAdminClient();
   if (!adminClient) {
     return NextResponse.json(
-      { error: "Admin service key not configured. Add SUPABASE_SERVICE_ROLE_KEY to environment." },
+      { error: "Admin service is temporarily unavailable." },
       { status: 503 }
     );
   }
@@ -87,7 +99,7 @@ export async function POST(
   if (error) {
     console.error("Failed to reset user password:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to reset password" },
+      { error: "Failed to reset password. Please try again." },
       { status: 500 }
     );
   }

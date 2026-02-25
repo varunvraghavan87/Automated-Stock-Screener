@@ -47,6 +47,23 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Verify target user exists and check current status
+  const { data: targetProfile } = await supabase
+    .from("user_profiles")
+    .select("approval_status")
+    .eq("user_id", userId)
+    .single();
+
+  if (!targetProfile) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+  if (targetProfile.approval_status === "approved") {
+    return NextResponse.json(
+      { error: "User is already approved" },
+      { status: 409 }
+    );
+  }
+
   // Approve the user
   const { error } = await supabase
     .from("user_profiles")
