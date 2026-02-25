@@ -1,4 +1,5 @@
 import { Activity } from "lucide-react";
+import { SupabaseHealthCheck } from "@/components/supabase-health-check";
 
 export default function AuthLayout({
   children,
@@ -13,6 +14,7 @@ export default function AuthLayout({
           Nifty Velocity <span className="text-primary">Alpha</span>
         </span>
       </div>
+      <SupabaseHealthCheck />
       <div className="w-full max-w-md">{children}</div>
     </div>
   );
