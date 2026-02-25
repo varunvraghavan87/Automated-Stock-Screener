@@ -44,7 +44,11 @@ function LoginContent() {
     setError("");
     setLoading(true);
 
-    if (!supabase) return;
+    if (!supabase) {
+      setError("Unable to connect to authentication service. Please check your configuration and try again.");
+      setLoading(false);
+      return;
+    }
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
@@ -58,8 +62,10 @@ function LoginContent() {
 
       router.push("/");
       router.refresh();
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      console.error("Login error:", err);
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(`Sign-in failed: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -69,7 +75,11 @@ function LoginContent() {
     setError("");
     setGoogleLoading(true);
 
-    if (!supabase) return;
+    if (!supabase) {
+      setError("Unable to connect to authentication service. Please check your configuration and try again.");
+      setGoogleLoading(false);
+      return;
+    }
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -83,8 +93,10 @@ function LoginContent() {
         setGoogleLoading(false);
       }
       // On success, the user is redirected to Google — no need to setLoading(false)
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      console.error("Google login error:", err);
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(`Google sign-in failed: ${message}`);
       setGoogleLoading(false);
     }
   };

@@ -51,7 +51,11 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    if (!supabase) return;
+    if (!supabase) {
+      setError("Unable to connect to authentication service. Please check your configuration and try again.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const { error: signUpError } = await supabase.auth.signUp({
@@ -71,8 +75,10 @@ export default function RegisterPage() {
       }
 
       setSuccess(true);
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      console.error("Registration error:", err);
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(`Registration failed: ${message}`);
     } finally {
       setLoading(false);
     }
