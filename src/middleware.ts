@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest) {
   // Auth endpoints: login, register, password reset, Kite OAuth initiation
   if (
     pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/auth/") ||
     pathname === "/api/kite/auth" ||
     pathname === "/api/kite/credentials" ||
     pathname.startsWith("/api/admin/")

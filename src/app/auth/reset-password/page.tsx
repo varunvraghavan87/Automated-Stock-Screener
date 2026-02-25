@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSupabase } from "@/hooks/useSupabase";
 import {
   Card,
   CardContent,
@@ -23,33 +22,30 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const supabase = useSupabase();
-
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    if (!supabase) {
-      setError("Unable to connect to authentication service. Please check your configuration and try again.");
-      setLoading(false);
-      return;
-    }
 
     try {
-      const { error: resetError } =
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
-        });
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
 
-      if (resetError) {
-        setError(resetError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Password reset failed.");
         return;
       }
 
       setSuccess(true);
     } catch (err) {
       console.error("Password reset error:", err);
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       setError(`Password reset failed: ${message}`);
     } finally {
       setLoading(false);

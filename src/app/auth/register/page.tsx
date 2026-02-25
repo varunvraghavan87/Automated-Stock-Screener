@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSupabase } from "@/hooks/useSupabase";
 import {
   Card,
   CardContent,
@@ -25,8 +24,6 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-
-  const supabase = useSupabase();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,33 +48,26 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    if (!supabase) {
-      setError("Unable to connect to authentication service. Please check your configuration and try again.");
-      setLoading(false);
-      return;
-    }
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
       });
 
-      if (signUpError) {
-        setError(signUpError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Registration failed.");
         return;
       }
 
       setSuccess(true);
     } catch (err) {
       console.error("Registration error:", err);
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       setError(`Registration failed: ${message}`);
     } finally {
       setLoading(false);

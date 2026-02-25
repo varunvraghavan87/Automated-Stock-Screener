@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useSupabase } from "@/hooks/useSupabase";
 import {
   Card,
   CardContent,
@@ -35,8 +34,6 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const supabase = useSupabase();
-
   const successMessage = searchParams.get("message");
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -44,19 +41,17 @@ function LoginContent() {
     setError("");
     setLoading(true);
 
-    if (!supabase) {
-      setError("Unable to connect to authentication service. Please check your configuration and try again.");
-      setLoading(false);
-      return;
-    }
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (signInError) {
-        setError(signInError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Sign-in failed.");
         return;
       }
 
@@ -64,7 +59,8 @@ function LoginContent() {
       router.refresh();
     } catch (err) {
       console.error("Login error:", err);
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       setError(`Sign-in failed: ${message}`);
     } finally {
       setLoading(false);
@@ -75,27 +71,27 @@ function LoginContent() {
     setError("");
     setGoogleLoading(true);
 
-    if (!supabase) {
-      setError("Unable to connect to authentication service. Please check your configuration and try again.");
-      setGoogleLoading(false);
-      return;
-    }
     try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
 
-      if (oauthError) {
-        setError(oauthError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Google sign-in failed.");
         setGoogleLoading(false);
+        return;
       }
+
+      // Redirect to the Google OAuth URL
+      window.location.href = data.url;
       // On success, the user is redirected to Google — no need to setLoading(false)
     } catch (err) {
       console.error("Google login error:", err);
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       setError(`Google sign-in failed: ${message}`);
       setGoogleLoading(false);
     }

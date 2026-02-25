@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSupabase } from "@/hooks/useSupabase";
 import {
   Card,
   CardContent,
@@ -23,8 +22,6 @@ export default function UpdatePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const supabase = useSupabase();
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,25 +46,31 @@ export default function UpdatePasswordPage() {
     }
 
     setLoading(true);
-    if (!supabase) return;
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
       });
 
-      if (updateError) {
-        setError(updateError.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Password update failed.");
         return;
       }
 
       // Sign out so they can log in with the new password
-      await supabase.auth.signOut();
+      await fetch("/api/auth/signout", { method: "POST" });
       router.push(
         "/auth/login?message=Password updated successfully. Please sign in with your new password."
       );
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      console.error("Update password error:", err);
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(`Password update failed: ${message}`);
     } finally {
       setLoading(false);
     }

@@ -4,35 +4,26 @@ import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 /**
- * Pings the Supabase project URL on mount and shows a warning banner
- * if the project is unreachable (e.g., paused free-tier project).
- * This helps users understand "Failed to fetch" errors.
+ * Pings the server-side auth profile endpoint on mount and shows a warning
+ * banner if the backend is unreachable (e.g., paused Supabase project or
+ * ISP blocking supabase.co).
  */
 export function SupabaseHealthCheck() {
   const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!url) {
-      setUnreachable(true);
-      return;
-    }
-
-    // Ping the Supabase REST endpoint with a lightweight HEAD request
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    fetch(`${url}/rest/v1/`, {
-      method: "HEAD",
+    // Ping our own API (server-side), which in turn contacts Supabase
+    fetch("/api/auth/profile", {
       signal: controller.signal,
-      headers: {
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-      },
+      credentials: "same-origin",
     })
       .then((res) => {
-        // Any response (even 4xx) means the server is reachable
         clearTimeout(timeoutId);
-        if (!res.ok && res.status === 0) {
+        // 503 = Supabase not configured; 500 = server error reaching Supabase
+        if (res.status === 503 || res.status === 500) {
           setUnreachable(true);
         }
       })

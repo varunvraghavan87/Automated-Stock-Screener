@@ -117,13 +117,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    // Use server-side proxy to bypass ISP DNS blocking of supabase.co
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (err) {
+      console.error("Sign-out API error:", err);
+    }
     setUser(null);
     setSession(null);
     setRole(null);
     setApprovalStatus(null);
-  }, [supabase]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, session, loading, role, approvalStatus, signOut }}>
