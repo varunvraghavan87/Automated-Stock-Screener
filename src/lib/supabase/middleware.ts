@@ -54,8 +54,17 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // If not authenticated and trying to access a protected route, redirect to login
+  // If not authenticated and trying to access a protected route
   if (!user && !isAuthRoute) {
+    // API routes: return 401 JSON (not a redirect to login page)
+    // Redirects cause "Unexpected end of JSON input" when clients call res.json()
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+    // Page routes: redirect to login
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);

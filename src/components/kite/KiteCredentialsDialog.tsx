@@ -37,8 +37,9 @@ export function KiteCredentialsDialog({
   useEffect(() => {
     if (open) {
       fetch("/api/kite/credentials")
-        .then((res) => res.json())
-        .then((data) => {
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json();
           setHasExisting(data.hasCredentials || false);
           setMaskedKey(data.maskedApiKey || "");
         })
@@ -77,8 +78,15 @@ export function KiteCredentialsDialog({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to save credentials");
+        let errorMsg = "Failed to save credentials";
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch {
+          // Response body was not JSON (e.g. redirect or empty)
+          if (res.status === 401) errorMsg = "Session expired. Please sign in again.";
+        }
+        throw new Error(errorMsg);
       }
 
       // Clear form and close
@@ -101,7 +109,14 @@ export function KiteCredentialsDialog({
     try {
       const res = await fetch("/api/kite/credentials", { method: "DELETE" });
       if (!res.ok) {
-        throw new Error("Failed to remove credentials");
+        let errorMsg = "Failed to remove credentials";
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch {
+          if (res.status === 401) errorMsg = "Session expired. Please sign in again.";
+        }
+        throw new Error(errorMsg);
       }
       setHasExisting(false);
       setMaskedKey("");
