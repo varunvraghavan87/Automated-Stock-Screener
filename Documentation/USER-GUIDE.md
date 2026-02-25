@@ -15,10 +15,11 @@
 7. [Paper Trade](#paper-trade)
 8. [Watchlist](#watchlist)
 9. [Position Size Calculator](#position-size-calculator)
-10. [Glossary](#glossary)
-11. [Typical Daily Workflow](#typical-daily-workflow)
-12. [Tips for Better Trading](#tips-for-better-trading)
-13. [Frequently Asked Questions](#frequently-asked-questions)
+10. [Admin Panel](#admin-panel)
+11. [Glossary](#glossary)
+12. [Typical Daily Workflow](#typical-daily-workflow)
+13. [Tips for Better Trading](#tips-for-better-trading)
+14. [Frequently Asked Questions](#frequently-asked-questions)
 
 ---
 
@@ -46,28 +47,44 @@ Nifty Velocity Alpha is an automated **momentum stock screener** built for the I
 
 ### 1. Create an Account
 
-Visit the app and sign up with your email address or Google account. You'll need to verify your email before you can access the screener.
+Visit the app and sign up with your email address or Google account.
+
+> **Admin Approval Required:** After registration, your account will be in **"pending approval"** status. An administrator must approve your account before you can access the app. You'll see a "Pending Approval" page until this happens. If your account is rejected, you'll see the rejection reason on this page.
 
 ### 2. Explore in Demo Mode
 
-The app works immediately in **Demo Mode** using sample market data. This lets you explore every feature without connecting to a broker. You'll see a "DEMO" badge in the header when using sample data.
+Once approved, the app works immediately in **Demo Mode** using sample market data. This lets you explore every feature without connecting to a broker. You'll see a "DEMO" badge in the header when using sample data.
 
-### 3. Connect Live Data (Optional)
+### 3. Set Up Your Kite API Credentials
 
-For real-time NSE market data, connect your Zerodha Kite account. See the [Connecting to Live Data](#connecting-to-live-market-data) section below.
+To use live market data, you'll need to save your own Zerodha Kite Connect API credentials. See the [Connecting to Live Data](#connecting-to-live-market-data) section below.
+
+### 4. Choose Your Theme
+
+The app supports both **light** and **dark** themes. Use the theme toggle (sun/moon icon) in the navigation bar to switch between them. Your preference is saved automatically.
 
 ---
 
 ## Connecting to Live Market Data
 
-The screener fetches real-time and historical price data from Zerodha's Kite Connect API.
+The screener fetches real-time and historical price data from Zerodha's Kite Connect API. Each user stores their own API credentials.
 
 ### Prerequisites
 
 - An active Zerodha trading account
-- A Kite Connect developer app (the app owner provides API credentials)
+- A Kite Connect developer app at [developers.kite.trade](https://developers.kite.trade)
 
-### How to Connect
+### Step 1: Save Your Kite API Credentials
+
+1. Create a Kite Connect app at [developers.kite.trade](https://developers.kite.trade)
+2. Set the **Redirect URL** in your Kite app to: `https://your-app-domain.com/api/kite/callback`
+3. Click the **key icon** (Kite Connect Setup) in the navigation bar
+4. Enter your **API Key** and **API Secret** from the Kite developer portal
+5. Click **Save Credentials**
+
+Your API secret is encrypted (AES-256-GCM) before being stored. You only need to do this once — credentials persist across sessions.
+
+### Step 2: Connect to Kite
 
 1. Go to the **Screener** page
 2. Click the **Connect Kite** button in the Kite Connect panel
@@ -75,6 +92,10 @@ The screener fetches real-time and historical price data from Zerodha's Kite Con
 4. Enter your Zerodha credentials and complete 2FA
 5. Authorize the app to access your market data
 6. You'll be redirected back with a **LIVE** badge showing in the header
+
+### Managing Credentials
+
+To view, update, or remove your credentials, click the **key icon** in the navigation bar. You'll see your masked API key and can update or delete your credentials.
 
 ### Important Notes
 
@@ -371,6 +392,38 @@ If you have Rs 5,00,000 in capital and risk 1% per trade:
 
 ---
 
+## Admin Panel
+
+The Admin Panel is accessible only to users with the **admin** role. It provides tools for managing user accounts.
+
+### Accessing the Panel
+
+Click **Admin** in the navigation bar (visible only to admin users). The panel is located at `/admin`.
+
+### Features
+
+**User Management Table**
+
+A table listing all registered users with:
+- Email address and display name
+- Role (`user` or `admin`)
+- Approval status (`pending`, `approved`, `rejected`)
+- Registration date
+
+**Actions (per user)**
+
+| Action | Description |
+|--------|-------------|
+| **Approve** | Grant access to a pending user. Changes status to `approved`. |
+| **Reject** | Deny access to a pending user. Optionally provide a rejection reason visible to the user. |
+| **Reset Password** | Set a new password for any non-admin user. Uses Supabase Admin API to bypass broken email flows. Requires a password with 8+ characters, one uppercase letter, and one number. |
+
+**Filtering**
+
+Use the status filter buttons (All, Pending, Approved, Rejected) to quickly find users by their approval status.
+
+---
+
 ## Glossary
 
 Click the **?** (help) icon in the navigation bar to open the searchable glossary. It contains 33 terms covering:
@@ -463,10 +516,24 @@ A: Once daily, ideally after market close (3:30 PM) for the cleanest closing pri
 **Q: Can I use this for intraday trading?**
 A: The screener is designed for swing trading (3-20 day holding period). Intraday signals would require different indicators and timeframes.
 
+### Accounts & Access
+
+**Q: My account is pending approval. What do I do?**
+A: After registration, an administrator must approve your account before you can access the app. Contact your admin if approval is taking a long time. You'll see a "Pending Approval" page until your account is approved.
+
+**Q: My account was rejected. Can I re-register?**
+A: If your account was rejected, you'll see the reason on the pending page. Contact your administrator to discuss re-approval.
+
+**Q: How do I set up my own Kite API credentials?**
+A: Click the key icon in the navigation bar to open the **Kite Connect Setup** dialog. Create a Kite Connect app at [developers.kite.trade](https://developers.kite.trade), set the redirect URL, then enter your API Key and API Secret. Your secret is encrypted before storage.
+
 ### Data & Connectivity
 
 **Q: Why does it say "DEMO" instead of "LIVE"?**
 A: Your Kite session is not connected or has expired. Go to the Screener page and click Connect Kite to authenticate. Kite sessions expire daily at 6:00 AM IST.
+
+**Q: I'm getting a "Failed to fetch" error on login.**
+A: This can happen if your ISP (e.g., Jio) blocks Supabase domains. The app uses server-side proxying to work around this automatically. Try clearing your browser cache and reloading. If the issue persists, check the Supabase health-check banner on the login page.
 
 **Q: The screener is taking a long time. Is it stuck?**
 A: Scanning 500 stocks with full historical data can take 1-2 minutes. The app processes stocks in batches to stay within API rate limits. If it takes more than 3 minutes, try refreshing the page and reconnecting Kite.
@@ -523,4 +590,4 @@ A: Stop-loss is calculated as Entry Price minus (1.5 x ATR). ATR (Average True R
 
 ---
 
-*This guide is current as of the latest build. For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*
+*This guide is current as of commit `1d8c9af` (2026-02-25). For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*

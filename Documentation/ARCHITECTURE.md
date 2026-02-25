@@ -31,14 +31,17 @@ auto_screener/
 +-- public/                      # Static assets
 +-- src/
 |   +-- app/                     # Next.js App Router pages + API routes
-|   |   +-- api/                 # 13 REST API endpoints
-|   |   |   +-- kite/            # Zerodha Kite OAuth (auth, callback, logout, status)
+|   |   +-- admin/               # Admin panel (user management)
+|   |   +-- api/                 # 25+ REST API endpoints
+|   |   |   +-- admin/           # User management (approve, reject, reset-password)
+|   |   |   +-- auth/            # Server-side auth proxy (login, register, profile, etc.)
+|   |   |   +-- kite/            # Zerodha Kite OAuth + credentials CRUD
 |   |   |   +-- paper-trades/    # Paper trade CRUD + close
 |   |   |   +-- watchlist/       # Watchlist CRUD
 |   |   |   +-- prices/          # Live price updates + lock status
 |   |   |   +-- screener/        # Screener execution + previous signals
 |   |   |   +-- signal-performance/  # Analytics data
-|   |   +-- auth/                # Authentication pages (login, register, reset, callback)
+|   |   +-- auth/                # Auth pages (login, register, reset, callback, pending)
 |   |   +-- screener/            # Screener UI page
 |   |   +-- signals/             # Signal analysis page
 |   |   +-- paper-trade/         # Paper trading dashboard
@@ -50,13 +53,15 @@ auto_screener/
 |   |
 |   +-- components/              # Reusable React components
 |   |   +-- layout/navbar.tsx    # Main navigation bar
+|   |   +-- kite/                # KiteCredentialsDialog
 |   |   +-- providers/           # Context provider wrapper
 |   |   +-- trade-actions/       # PaperBuyDialog, CloseTradeDialog, WatchlistButton
 |   |   +-- glossary-dialog.tsx  # Searchable glossary modal (33 terms)
-|   |   +-- ui/                  # shadcn/ui primitives (badge, button, card, dialog, etc.)
+|   |   +-- supabase-health-check.tsx  # Backend connectivity banner
+|   |   +-- ui/                  # shadcn/ui primitives + sortable-header
 |   |
 |   +-- contexts/                # React Context state management
-|   |   +-- AuthContext.tsx       # Supabase auth state
+|   |   +-- AuthContext.tsx       # Server-API auth state (no browser Supabase client)
 |   |   +-- ScreenerContext.tsx   # Screener results + refresh + market regime
 |   |   +-- PaperTradeContext.tsx # Open/closed trades + CRUD
 |   |   +-- WatchlistContext.tsx  # Watchlist items + CRUD
@@ -66,6 +71,8 @@ auto_screener/
 |   |   +-- useScreenerData.ts   # Screener context accessor
 |   |   +-- usePriceUpdater.ts   # 3-minute price polling loop
 |   |   +-- useSupabase.ts       # Browser Supabase client singleton
+|   |   +-- useChartColors.ts    # Theme-aware chart color palette
+|   |   +-- useSortable.ts       # Column sort state + comparator
 |   |
 |   +-- lib/                     # Core business logic (no React dependencies)
 |   |   +-- screener-engine.ts   # 6-phase pipeline + scoring + signals (~500 LOC)
@@ -76,6 +83,7 @@ auto_screener/
 |   |   +-- rebalancing.ts      # Exit signal detection (5 checks, ~240 LOC)
 |   |   +-- kite-api.ts         # Zerodha Kite Connect wrapper (~300 LOC)
 |   |   +-- kite-session.ts     # OAuth token exchange + cookie management
+|   |   +-- kite-credentials.ts # AES-256-GCM encryption for per-user Kite secrets
 |   |   +-- kite-lock.ts        # In-process async mutex
 |   |   +-- rate-limit.ts       # Sliding-window rate limiter
 |   |   +-- market-hours.ts     # IST market hours + trading day counter
@@ -83,7 +91,7 @@ auto_screener/
 |   |   +-- types.ts            # All TypeScript interfaces (~800 LOC)
 |   |   +-- validation.ts       # Zod schemas + record limits
 |   |   +-- utils.ts            # Currency/number formatting helpers
-|   |   +-- supabase/           # Supabase client, server, middleware, helpers
+|   |   +-- supabase/           # Supabase client, server, middleware, admin helpers
 |   |
 |   +-- middleware.ts            # Rate limiting + Supabase session + Cache-Control
 |
@@ -208,30 +216,53 @@ POST /api/prices/update
 [Client] All components re-render with fresh prices
 ```
 
-### Authentication Flow
+### Authentication Flow (Server-Side Auth Proxy)
+
+All Supabase auth operations are proxied through the app's own API routes. The browser **never** contacts `supabase.co` directly. This architecture was adopted to bypass Jio ISP DNS poisoning of `*.supabase.co`.
 
 ```
-[Supabase Auth]                          [Kite Connect OAuth]
+[Supabase Auth — Server-Side Proxy]        [Kite Connect OAuth]
 
-User -> /auth/login                      User -> "Connect Kite" button
-  |                                        |
-Supabase validates credentials           GET /api/kite/auth
-  |                                        |
-JWT token in sb-* cookies               Generate CSRF state -> HttpOnly cookie
-  |                                        |
-Middleware: getUser() on every request    Redirect -> kite.zerodha.com/connect/login
-  |                                        |
-AuthContext reads session                User logs into Zerodha
-  |                                        |
-Protected routes accessible              GET /api/kite/callback?request_token=...
-                                           |
-                                         Validate CSRF state
-                                           |
-                                         Exchange token -> SHA-256 checksum
-                                           |
-                                         Store access_token in kite_session cookie
-                                           |
-                                         Redirect -> /screener?kite_connected=true
+User -> /auth/login page                    User -> "Connect Kite" button
+  |                                           |
+Browser POST /api/auth/login               GET /api/kite/auth
+  |                                           |
+[Vercel] Supabase server-to-server         Generate CSRF state -> HttpOnly cookie
+  |                                           |
+JWT token set in sb-* cookies              Redirect -> kite.zerodha.com/connect/login
+  |                                           |
+Middleware: getUser() on every request     User logs into Zerodha
+  |                                           |
+AuthContext fetches /api/auth/profile      GET /api/kite/callback?request_token=...
+  |                                           |
+Protected routes accessible                Validate CSRF state
+                                              |
+                                           Exchange token -> SHA-256 checksum
+                                              |
+                                           Store access_token in kite_session cookie
+                                              |
+                                           Redirect -> /screener?kite_connected=true
+```
+
+**Admin-Approval Registration Flow:**
+
+```
+User -> /auth/register page
+  |
+Browser POST /api/auth/register
+  |
+[Vercel] Create Supabase auth user + user_profiles row (approval_status = 'pending')
+  |
+Redirect -> /auth/pending ("Your account is pending approval")
+  |
+Admin -> /admin panel -> Approve / Reject user
+  |
+User's approval_status updated -> 'approved' or 'rejected'
+  |
+On next login, middleware checks approval_status:
+  - 'approved' -> full access
+  - 'pending'  -> redirect to /auth/pending
+  - 'rejected' -> redirect to /auth/pending (shows rejection reason)
 ```
 
 ---
@@ -324,13 +355,61 @@ Protected routes accessible              GET /api/kite/callback?request_token=..
 | outcome | VARCHAR | `'target_hit'`, `'stopped_out'`, `'expired'`, `'pending'` |
 | created_at | TIMESTAMP | |
 
+### `user_profiles`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| user_id | UUID (PK, FK) | References `auth.users.id` |
+| email | VARCHAR | User's email address |
+| display_name | VARCHAR | User's display name |
+| role | VARCHAR | `'user'` or `'admin'` (default `'user'`) |
+| approval_status | VARCHAR | `'pending'`, `'approved'`, or `'rejected'` |
+| rejection_reason | TEXT | Nullable (set when admin rejects) |
+| created_at | TIMESTAMP | Auto-set |
+| updated_at | TIMESTAMP | Auto-set |
+
+**RLS Note:** Uses a `SECURITY DEFINER` function (`get_user_role()`) to avoid infinite recursion when RLS policies query the same table.
+
+### `kite_credentials`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| user_id | UUID (PK, FK) | References `auth.users.id` |
+| kite_api_key | VARCHAR | User's Kite Connect API key (plaintext) |
+| kite_api_secret_encrypted | TEXT | AES-256-GCM encrypted API secret |
+| created_at | TIMESTAMP | Auto-set |
+| updated_at | TIMESTAMP | Auto-set |
+
 **All tables use Row-Level Security (RLS)**: every query filters by `user_id = auth.uid()`.
 
 ---
 
 ## API Endpoint Catalog
 
-### Authentication
+### Auth Proxy (Server-Side)
+
+All Supabase auth operations proxied through Vercel to bypass ISP DNS issues.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/auth/login` | No | Email/password login via Supabase |
+| POST | `/api/auth/register` | No | Create account + pending user_profile |
+| POST | `/api/auth/reset-password` | No | Send password reset email |
+| POST | `/api/auth/google` | No | Initiate Google OAuth via Supabase |
+| POST | `/api/auth/update-password` | Yes | Set new password (reset flow) |
+| POST | `/api/auth/signout` | Yes | Clear Supabase session cookies |
+| GET | `/api/auth/profile` | Yes | Get user info, role, approval status |
+
+### Admin
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/admin/users` | Admin | List all users with profiles |
+| POST | `/api/admin/users/[userId]/approve` | Admin | Approve a pending user |
+| POST | `/api/admin/users/[userId]/reject` | Admin | Reject a user (with reason) |
+| POST | `/api/admin/users/[userId]/reset-password` | Admin | Reset user password (Supabase Admin API) |
+
+### Kite Connect
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
@@ -338,6 +417,14 @@ Protected routes accessible              GET /api/kite/callback?request_token=..
 | GET | `/api/kite/callback` | No | Kite OAuth callback + token exchange |
 | POST | `/api/kite/logout` | Yes | Clear Kite session cookie |
 | GET | `/api/kite/status` | Yes | Check if Kite connected |
+
+### Kite Credentials (Per-User)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/kite/credentials` | Yes | Check if user has stored credentials |
+| POST | `/api/kite/credentials` | Yes | Store/update API key + encrypted secret |
+| DELETE | `/api/kite/credentials` | Yes | Remove stored credentials |
 
 ### Screener
 
@@ -385,6 +472,29 @@ Protected routes accessible              GET /api/kite/callback?request_token=..
 ---
 
 ## Security Architecture
+
+### Server-Side Auth Proxy
+
+All Supabase auth calls are proxied through 7 API routes on the app's own Vercel domain. The browser never contacts `*.supabase.co` directly. This mitigates ISP DNS poisoning (e.g., Jio resolving Supabase domains to a sinkhole IP).
+
+- **Middleware**: Unauthenticated requests to `/api/*` routes return `401 JSON` (not HTML redirects), preventing JSON parse errors in client code.
+- **AuthContext**: Fetches user state from `/api/auth/profile` — no browser Supabase client in the auth flow.
+
+### Credential Encryption (AES-256-GCM)
+
+Per-user Kite API secrets are encrypted at rest using Web Crypto `AES-GCM`:
+- **Key**: 256-bit key from `KITE_CREDENTIALS_ENCRYPTION_KEY` env var (64-char hex)
+- **IV**: 96-bit random nonce per encryption
+- **Storage**: Base64-encoded `iv + ciphertext + auth_tag` in Supabase `kite_credentials.kite_api_secret_encrypted`
+- Decryption happens only server-side when a Kite API call is needed
+
+### Admin Role-Based Access Control
+
+- `user_profiles.role` column: `'user'` (default) or `'admin'`
+- Admin API routes verify role via `user_profiles` query before processing
+- `SECURITY DEFINER` function `get_user_role()` avoids RLS infinite recursion
+- New users start with `approval_status = 'pending'`; admin must approve before access is granted
+- Middleware redirects unapproved users to `/auth/pending`
 
 ### Headers (`next.config.ts`)
 
@@ -434,9 +544,11 @@ All API inputs validated with Zod schemas using `.strict()` mode:
 |----------|-------|----------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Client + Server | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + Server | Yes | Supabase public API key (RLS-protected) |
-| `KITE_API_KEY` | Server only | Yes | Zerodha Kite API key (public identifier) |
-| `KITE_API_SECRET` | Server only | Yes | Zerodha Kite API secret (private) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Yes | Supabase service-role key (admin operations, password reset) |
+| `KITE_CREDENTIALS_ENCRYPTION_KEY` | Server only | Yes | 64-char hex string for AES-256-GCM encryption of Kite API secrets |
 | `NODE_ENV` | Server | Auto | `development` or `production` |
+
+**Note:** Global `KITE_API_KEY` and `KITE_API_SECRET` env vars are no longer used. Each user stores their own Kite credentials via the Kite Connect Setup dialog (encrypted at rest in Supabase).
 
 ---
 

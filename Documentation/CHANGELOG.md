@@ -8,11 +8,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Commits | 23 |
+| Total Commits | 39 |
 | First Commit | 2026-02-19 |
-| Latest Commit | 2026-02-21 |
-| Total Files | 60+ source files |
-| Lines of Code | ~12,000+ (src/) |
+| Latest Commit | 2026-02-25 |
+| Total Files | 90+ source files |
+| Lines of Code | ~15,000+ (src/) |
 | Contributors | Varun Raghavan, Claude Opus 4.6 |
 
 ---
@@ -381,6 +381,238 @@ Four documentation files covering every aspect of the project:
 
 ---
 
+### 24. `783141c` &mdash; 2026-02-24
+
+**Add per-user Kite API credentials with encrypted storage**
+
+Each user now manages their own Zerodha Kite API key and secret instead of sharing global credentials:
+
+- Kite Connect Setup dialog in the navbar for entering/updating API credentials
+- AES-256-GCM encryption of API secrets at rest using `KITE_CREDENTIALS_ENCRYPTION_KEY`
+- Per-user credential CRUD API (`/api/kite/credentials`)
+- Kite OAuth and data routes read credentials from the user's stored record
+- Zod validation for alphanumeric API key/secret format
+- SQL migration for `kite_credentials` table with RLS policies
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 14 | +673 | -34 |
+
+**Key files created:** `kite-credentials.ts`, `KiteCredentialsDialog.tsx`, `/api/kite/credentials/route.ts`, `kite_credentials.sql`
+
+---
+
+### 25. `7e9ed74` &mdash; 2026-02-24
+
+**Add admin-approval user registration with role-based access control**
+
+New users now require administrator approval before accessing the application:
+
+- `user_profiles` table with `role` (user/admin), `approval_status` (pending/approved/rejected), and `rejection_reason`
+- Database trigger auto-creates profile on Supabase Auth user creation
+- Admin panel page (`/admin`) with user list, approve/reject buttons, and status filters
+- Middleware blocks unapproved users from protected routes (redirects to pending page)
+- Admin API endpoints for user management (`/api/admin/users`, approve, reject)
+- RLS policies on `user_profiles` with `SECURITY DEFINER` helper function
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 12 | +926 | -10 |
+
+**Key files created:** `admin/page.tsx`, `/api/admin/users/route.ts`, `/api/admin/users/[userId]/approve/route.ts`, `/api/admin/users/[userId]/reject/route.ts`, `auth/pending/page.tsx`, `user_profiles.sql`
+
+---
+
+### 26. `9609325` &mdash; 2026-02-24
+
+**Fix RLS infinite recursion on user_profiles with SECURITY DEFINER function**
+
+The RLS policy on `user_profiles` was calling `auth.uid()` which triggered another RLS check, creating infinite recursion. Fixed by using a `SECURITY DEFINER` function to bypass RLS for the admin role check.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 1 | +21 | -15 |
+
+---
+
+### 27. `f68beae` &mdash; 2026-02-24
+
+**Fix admin panel visibility by routing profile queries through server API**
+
+Browser-side Supabase queries for user role were failing due to RLS. Created `/api/auth/profile` endpoint that fetches the user's role and approval status server-side.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 2 | +43 | -15 |
+
+**Key files created:** `/api/auth/profile/route.ts`
+
+---
+
+### 28. `730d419` &mdash; 2026-02-24
+
+**Fix CSP font-src, hydration warning, and profile fetch reliability**
+
+- Added `https://fonts.gstatic.com` to CSP `font-src` to fix Google Fonts loading
+- Fixed React hydration mismatch warning in layout
+- Improved profile fetch error handling in AuthContext
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 3 | +24 | -12 |
+
+---
+
+### 29. `151b620` &mdash; 2026-02-24
+
+**Fix forgot password flow: route through auth callback for PKCE code exchange**
+
+Password reset emails now redirect through `/auth/callback` which exchanges the PKCE code before forwarding to the update-password page.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 2 | +7 | -3 |
+
+---
+
+### 30. `e933c8a` &mdash; 2026-02-24
+
+**Fix market indicator, add column sorting, and remove duplicate stocks**
+
+- **Market Indicator**: Fixed "Market Open/Closed" badge that was always showing the wrong state
+- **Column Sorting**: Added sortable table headers to all data tables (Dashboard, Screener, Signals, Paper Trade, Watchlist) with a reusable `useSortable` hook and `SortableHeader` component
+- **Deduplication**: Screener engine now deduplicates stocks by symbol before processing
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 11 | +328 | -78 |
+
+**Key files created:** `useSortable.ts`, `sortable-header.tsx`
+
+---
+
+### 31. `6f120f4` &mdash; 2026-02-25
+
+**Add light theme and make positive/negative indicators more pronounced**
+
+- **Light Theme**: Full light theme support via `next-themes`. Theme toggle in navbar. All chart colors, badges, and indicator cards adapt via `useChartColors` hook.
+- **Pronounced Indicators**: Higher contrast greens/reds across both themes.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 9 | +238 | -144 |
+
+**Key files created:** `useChartColors.ts`
+
+---
+
+### 32. `813ca3e` &mdash; 2026-02-25
+
+**Fix live data reverting to demo on page refresh**
+
+ScreenerContext was losing the `isKiteConnected` flag during sessionStorage restoration. Now persists and restores Kite connection state alongside screener results.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 1 | +18 | -6 |
+
+---
+
+### 33. `101bf2c` &mdash; 2026-02-25
+
+**Fix login "Failed to fetch" by broadening CSP and improving auth error handling**
+
+- Added `https://*.supabase.com` to CSP `connect-src`
+- Auth pages now show actual error messages instead of silently failing
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 4 | +37 | -13 |
+
+---
+
+### 34. `3f8847c` &mdash; 2026-02-25
+
+**Add Supabase health-check banner on auth pages**
+
+`SupabaseHealthCheck` component pings `/api/auth/profile` and shows a warning banner if the backend is unreachable. Helps diagnose connectivity issues on auth pages.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 2 | +74 | 0 |
+
+**Key files created:** `supabase-health-check.tsx`
+
+---
+
+### 35. `2c1e9fc` &mdash; 2026-02-25
+
+**Proxy all auth operations through server API to bypass Jio DNS poisoning**
+
+Major architectural change: all Supabase auth operations now route through the app's own Vercel API routes instead of calling `supabase.co` directly from the browser.
+
+**Root cause:** Jio ISP DNS-poisons `*.supabase.co`, resolving it to a sinkhole IP. Since the Supabase JS SDK runs in the browser, all auth calls fail for Jio users.
+
+**Solution:** 6 new server-side auth API routes. The browser only talks to the app's own domain (Vercel), which contacts Supabase server-to-server.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 13 | +315 | -93 |
+
+**Key files created:** `/api/auth/login/route.ts`, `/api/auth/register/route.ts`, `/api/auth/reset-password/route.ts`, `/api/auth/google/route.ts`, `/api/auth/update-password/route.ts`, `/api/auth/signout/route.ts`
+
+---
+
+### 36. `b5004cf` &mdash; 2026-02-25
+
+**Add admin password reset endpoint to bypass broken email flow**
+
+Jio DNS poisoning also breaks Supabase's password reset email links. Admin-only API endpoint uses Supabase Admin API (`service_role` key) to set passwords directly, plus "Reset Password" button in admin panel.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 3 | +193 | 0 |
+
+**Key files created:** `supabase/admin.ts`, `/api/admin/users/[userId]/reset-password/route.ts`
+
+---
+
+### 37. `bdfaf8a` &mdash; 2026-02-25
+
+**Remove browser Supabase client from auth flow to fix login on Jio ISP**
+
+AuthContext rewritten to fetch all auth state from `/api/auth/profile` (server-side). Added `refreshAuth()` function, `visibilitychange` listener, and rejection reason support. No browser Supabase client used anywhere in auth flow.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 5 | +103 | -97 |
+
+---
+
+### 38. `32368fc` &mdash; 2026-02-25
+
+**Fix JSON parse error on Kite credentials save when unauthenticated**
+
+Middleware now returns `401 JSON` for unauthenticated API calls (was returning HTML redirect). Kite dialog has defensive JSON parsing with "Session expired" messages.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 2 | +30 | -6 |
+
+---
+
+### 39. `1d8c9af` &mdash; 2026-02-25
+
+**Improve Kite credentials error messages to show actual cause**
+
+Separated encryption errors from database errors. UI now shows actionable messages (missing encryption key vs. RLS policy failure) instead of generic errors.
+
+| Files | Insertions | Deletions |
+|-------|-----------|-----------|
+| 1 | +14 | -2 |
+
+---
+
 ## Feature Timeline
 
 ```
@@ -407,6 +639,22 @@ Feb 21  [UX]       Indicator tooltips, CCI/Williams %R/A/D scoring
         [Feature]  Portfolio risk dashboard (heat, sectors, risk checks)
         [Security] Open redirect fix, rate limiting, CSP, auth guards
         [Docs]     Architecture, screening logic, changelog, user guide
+
+Feb 24  [Feature]  Per-user Kite API credentials (AES-256-GCM encryption)
+        [Feature]  Admin-approval registration + role-based access control
+        [Fix]      RLS infinite recursion on user_profiles
+        [Fix]      Admin panel visibility, CSP font-src, profile fetch
+        [Fix]      Forgot password PKCE flow
+        [UX]       Column sorting on all data tables
+        [Fix]      Market indicator, duplicate stock removal
+
+Feb 25  [UX]       Light theme + more pronounced indicator colors
+        [Fix]      Live data reverting to demo on refresh
+        [Security] Server-side auth proxy (Jio ISP DNS bypass)
+        [Feature]  Admin password reset (bypasses broken email flow)
+        [Infra]    Remove browser Supabase client from auth flow
+        [Fix]      JSON parse error on unauthenticated API calls
+        [Fix]      Kite credentials error message improvements
 ```
 
 ---
