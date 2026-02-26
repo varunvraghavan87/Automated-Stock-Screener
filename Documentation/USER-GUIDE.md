@@ -541,6 +541,9 @@ A: Scanning 500 stocks with full historical data can take 1-2 minutes. The app p
 **Q: Why do some stocks show "N/A" for indicators?**
 A: Some indicators require sufficient historical data (e.g., 200-day EMA needs 200+ trading days). Recently listed stocks may not have enough history.
 
+**Q: My paper trades or watchlist disappeared. What happened?**
+A: This is usually a transient session or RLS (Row Level Security) issue. Try refreshing the page or logging out and back in. Your data is stored securely in the database and is not deleted. If the problem persists, ask your admin to visit `/api/debug/tables` — this diagnostic endpoint compares visible vs. actual data counts and will reveal if RLS policies need to be re-applied.
+
 **Q: My Kite connection keeps disconnecting. Why?**
 A: Zerodha Kite sessions are valid for one calendar day and expire at 6:00 AM IST. This is a Kite API design. You need to reconnect each trading day.
 
@@ -590,4 +593,4 @@ A: Stop-loss is calculated as Entry Price minus (1.5 x ATR). ATR (Average True R
 
 ---
 
-*This guide is current as of commit `718e752` (2026-02-25). For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*
+*This guide is current as of commit `b0a74d4` (2026-02-26). For technical details, see ARCHITECTURE.md. For screening methodology, see SCREENING-LOGIC.md.*

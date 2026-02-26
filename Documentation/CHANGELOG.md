@@ -8,9 +8,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Commits | 41 |
+| Total Commits | 42 |
 | First Commit | 2026-02-19 |
-| Latest Commit | 2026-02-25 |
+| Latest Commit | 2026-02-26 |
 | Total Files | 90+ source files |
 | Lines of Code | ~15,000+ (src/) |
 | Contributors | Varun Raghavan, Claude Opus 4.6 |
@@ -645,6 +645,24 @@ Security hardening across 12 files after a comprehensive audit:
 
 ---
 
+### 42. `b0a74d4` &mdash; 2026-02-26
+
+**Add missing SQL migrations for paper_trades & watchlist + admin RLS diagnostic endpoint**
+
+Investigated a transient data disappearance (paper trades and watchlist returned empty with no errors). Root cause: the `paper_trades` and `watchlist` tables had no migration files, so RLS policies had no source of truth if lost. Created proper migration files matching the pattern used by `user_profiles` and `kite_credentials`, plus an admin-only diagnostic endpoint.
+
+- **`paper_trades.sql`**: Full `CREATE TABLE IF NOT EXISTS` with 22 columns, 3 indexes, 4 RLS policies (SELECT/INSERT/UPDATE/DELETE scoped to `auth.uid() = user_id`), and auto-update `updated_at` trigger. All statements idempotent.
+- **`watchlist.sql`**: Same pattern with 16 columns, `UNIQUE(user_id, symbol)` constraint, 1 index, 4 RLS policies, and auto-update trigger.
+- **`GET /api/debug/tables`**: Admin-only endpoint that compares anon client (RLS-filtered) vs admin client (service-role, RLS-bypassed) query counts. Instantly reveals if RLS is blocking data access.
+
+| Files | Insertions |
+|-------|-----------:|
+| 3 | +200 |
+
+**Key files created:** `supabase/migrations/paper_trades.sql`, `supabase/migrations/watchlist.sql`, `src/app/api/debug/tables/route.ts`
+
+---
+
 ## Feature Timeline
 
 ```
@@ -690,6 +708,9 @@ Feb 25  [UX]       Light theme + more pronounced indicator colors
         [Docs]     Full documentation refresh (16 commits, 3 files)
         [Security] Open redirect fixes, info leakage, CSP hardening,
                    session encryption, timing-safe CSRF, state guards
+
+Feb 26  [Infra]    SQL migrations for paper_trades & watchlist tables
+        [Infra]    Admin RLS diagnostic endpoint (GET /api/debug/tables)
 ```
 
 ---

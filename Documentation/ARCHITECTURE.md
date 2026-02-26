@@ -35,6 +35,7 @@ auto_screener/
 |   |   +-- api/                 # 25+ REST API endpoints
 |   |   |   +-- admin/           # User management (approve, reject, reset-password)
 |   |   |   +-- auth/            # Server-side auth proxy (login, register, profile, etc.)
+|   |   |   +-- debug/           # Admin RLS diagnostic (tables)
 |   |   |   +-- kite/            # Zerodha Kite OAuth + credentials CRUD
 |   |   |   +-- paper-trades/    # Paper trade CRUD + close
 |   |   |   +-- watchlist/       # Watchlist CRUD
@@ -271,6 +272,8 @@ On next login, middleware checks approval_status:
 
 ### `paper_trades`
 
+> **Migration:** `supabase/migrations/paper_trades.sql` — includes table DDL, 3 indexes, 4 RLS policies, and `updated_at` trigger. All statements idempotent (`IF NOT EXISTS`, `DROP POLICY IF EXISTS`).
+
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID (PK) | Auto-generated |
@@ -298,6 +301,8 @@ On next login, middleware checks approval_status:
 | updated_at | TIMESTAMP | Auto-set |
 
 ### `watchlist`
+
+> **Migration:** `supabase/migrations/watchlist.sql` — includes table DDL, `UNIQUE(user_id, symbol)` constraint, 1 index, 4 RLS policies, and `updated_at` trigger. All statements idempotent.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -460,6 +465,12 @@ All Supabase auth operations proxied through Vercel to bypass ISP DNS issues.
 | POST | `/api/prices/update` | Yes | Fetch + update live quotes |
 | GET | `/api/prices/status` | Yes | Check price update lock status |
 | GET | `/api/signal-performance?days=30` | Yes | Get signal analytics |
+
+### Debug (Admin Only)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/debug/tables` | Admin | RLS diagnostic — compares anon vs service-role query counts for `paper_trades` and `watchlist` |
 
 ### Rate Limits (per IP)
 
