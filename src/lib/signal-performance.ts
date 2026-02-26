@@ -9,6 +9,7 @@ import type {
   SignalSnapshot,
   ScreenerSnapshot,
   SignalPerformanceAnalytics,
+  RankedSignal,
   SignalWinRate,
   AvgReturnByPeriod,
   HitRateStats,
@@ -34,11 +35,17 @@ function computeReturn(entry: number, current: number): number {
 }
 
 /**
- * Get the best available forward price for a signal.
+ * Get the best available forward price for a signal with its period label.
  * Prefers the longest period available (10d > 5d > 3d > 1d).
  */
-function getBestForwardPrice(sig: SignalSnapshot): number | null {
-  return sig.priceAfter10d ?? sig.priceAfter5d ?? sig.priceAfter3d ?? sig.priceAfter1d;
+function getBestForwardPriceWithPeriod(
+  sig: SignalSnapshot
+): { price: number; period: "1D" | "3D" | "5D" | "10D" } | null {
+  if (sig.priceAfter10d !== null) return { price: sig.priceAfter10d, period: "10D" };
+  if (sig.priceAfter5d !== null) return { price: sig.priceAfter5d, period: "5D" };
+  if (sig.priceAfter3d !== null) return { price: sig.priceAfter3d, period: "3D" };
+  if (sig.priceAfter1d !== null) return { price: sig.priceAfter1d, period: "1D" };
+  return null;
 }
 
 // ---- Core Computation Functions ----
@@ -145,8 +152,21 @@ function computeHitRate(signals: SignalSnapshot[]): HitRateStats {
   const pending = signals.filter(
     (s) => !s.outcome || s.outcome === "pending"
   ).length;
-  const total = resolved.length || 1; // avoid division by zero
 
+  // Return null percentages when no resolved signals (instead of misleading 0%)
+  if (resolved.length === 0) {
+    return {
+      targetHit,
+      stoppedOut,
+      expired,
+      pending,
+      targetHitPct: null,
+      stoppedOutPct: null,
+      expiredPct: null,
+    };
+  }
+
+  const total = resolved.length;
   return {
     targetHit,
     stoppedOut,
@@ -206,22 +226,25 @@ export function computeSignalPerformance(
   );
 
   // Best/worst signals by return (using longest available forward period)
-  const withReturns = signals
-    .filter((s) => getBestForwardPrice(s) !== null)
+  const withReturns: RankedSignal[] = signals
     .map((s) => {
-      const bestPrice = getBestForwardPrice(s)!;
-      return { signal: s, returnPct: computeReturn(s.entryPrice, bestPrice) };
-    });
+      const result = getBestForwardPriceWithPeriod(s);
+      if (!result) return null;
+      return {
+        signal: s,
+        returnPct: computeReturn(s.entryPrice, result.price),
+        period: result.period,
+      };
+    })
+    .filter((item): item is RankedSignal => item !== null);
 
   const bestSignals = [...withReturns]
     .sort((a, b) => b.returnPct - a.returnPct)
-    .slice(0, 5)
-    .map((item) => item.signal);
+    .slice(0, 5);
 
   const worstSignals = [...withReturns]
     .sort((a, b) => a.returnPct - b.returnPct)
-    .slice(0, 5)
-    .map((item) => item.signal);
+    .slice(0, 5);
 
   // Date range
   const dates = signals.map((s) => s.createdAt).sort();
@@ -410,15 +433,21 @@ export function computeStrategySummary(
   const actionableTiers = tierPerf.filter(
     (t) => t.tierLabel === "STRONG_BUY" || t.tierLabel === "BUY"
   );
-  const bestActionableWinRate = Math.max(
-    ...actionableTiers.map((t) => t.winRate),
+  // Weighted average win rate across actionable tiers (by resolved count)
+  const totalActionableWins = actionableTiers.reduce((s, t) => s + t.wins, 0);
+  const totalActionableResolved = actionableTiers.reduce(
+    (s, t) => s + t.wins + t.losses,
     0
   );
+  const weightedWinRate =
+    totalActionableResolved > 0
+      ? (totalActionableWins / totalActionableResolved) * 100
+      : 0;
 
   let overallVerdict: string;
   if (totalResolved < 5) overallVerdict = "Needs more data";
-  else if (bestActionableWinRate > 60) overallVerdict = "Promising";
-  else if (bestActionableWinRate >= 40) overallVerdict = "Mixed";
+  else if (weightedWinRate > 60) overallVerdict = "Promising";
+  else if (weightedWinRate >= 40) overallVerdict = "Mixed";
   else overallVerdict = "Underperforming";
 
   return {

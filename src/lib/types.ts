@@ -479,14 +479,20 @@ export interface SignalSnapshot {
 
 // ---- Signal Performance Analytics Types ----
 
+export interface RankedSignal {
+  signal: SignalSnapshot;
+  returnPct: number;
+  period: "1D" | "3D" | "5D" | "10D";
+}
+
 export interface SignalPerformanceAnalytics {
   totalSignals: number;
   totalSnapshots: number;
   dateRange: { from: string; to: string } | null;
   winRateBySignal: SignalWinRate[];
   avgReturnByPeriod: AvgReturnByPeriod[];
-  bestSignals: SignalSnapshot[];
-  worstSignals: SignalSnapshot[];
+  bestSignals: RankedSignal[];
+  worstSignals: RankedSignal[];
   hitRate: HitRateStats;
   accuracyTrend: AccuracyTrendPoint[];
 }
@@ -514,9 +520,9 @@ export interface HitRateStats {
   stoppedOut: number;
   expired: number;
   pending: number;
-  targetHitPct: number;
-  stoppedOutPct: number;
-  expiredPct: number;
+  targetHitPct: number | null;
+  stoppedOutPct: number | null;
+  expiredPct: number | null;
 }
 
 export interface AccuracyTrendPoint {

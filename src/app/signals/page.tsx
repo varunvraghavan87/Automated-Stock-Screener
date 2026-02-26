@@ -15,11 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  TrendingUp,
-  TrendingDown,
   Activity,
-  BarChart3,
-  Zap,
   Target,
   Clock,
   RefreshCw,
@@ -50,8 +46,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { generateHistoricalPrices } from "@/lib/mock-data";
-import { formatCurrency, formatPercent } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { useScreenerData } from "@/hooks/useScreenerData";
 import { computeSignalPerformance, computeBacktestAnalytics } from "@/lib/signal-performance";
 import { useChartColors } from "@/hooks/useChartColors";
@@ -125,14 +120,14 @@ export default function SignalsPage() {
     ].filter((d) => d.value > 0);
   }, [perfAnalytics]);
 
-  // Prepare avg return chart data
+  // Prepare avg return chart data (null = omit bar, not 0%)
   const avgReturnChartData = useMemo(() => {
     return perfAnalytics.avgReturnByPeriod.map((r) => ({
       signal: r.signal.replace("_", " "),
-      "1D": r.avgReturn1d ?? 0,
-      "3D": r.avgReturn3d ?? 0,
-      "5D": r.avgReturn5d ?? 0,
-      "10D": r.avgReturn10d ?? 0,
+      "1D": r.avgReturn1d ?? null,
+      "3D": r.avgReturn3d ?? null,
+      "5D": r.avgReturn5d ?? null,
+      "10D": r.avgReturn10d ?? null,
     }));
   }, [perfAnalytics]);
 
@@ -241,12 +236,42 @@ export default function SignalsPage() {
     ];
   }, [topPicks]);
 
-  const priceData = useMemo(() => {
-    if (topPicks.length === 0) return [];
-    return generateHistoricalPrices(topPicks[0].stock.lastPrice, 90);
+  // ---- Real Historical Price Data ----
+  const [priceData, setPriceData] = useState<Array<{ date: string; close: number; volume: number }>>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [priceMode, setPriceMode] = useState<"live" | "demo">("demo");
+
+  useEffect(() => {
+    if (topPicks.length === 0) {
+      setPriceData([]);
+      return;
+    }
+    const symbol = topPicks[0].stock.symbol;
+    const exchange = topPicks[0].stock.exchange || "NSE";
+    let cancelled = false;
+
+    setPriceLoading(true);
+    fetch(`/api/historical-prices?symbol=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setPriceData(data.prices || []);
+        setPriceMode(data.mode || "demo");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPriceData([]);
+        setPriceMode("demo");
+      })
+      .finally(() => {
+        if (!cancelled) setPriceLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [topPicks]);
 
   const phasePassRates = useMemo(() => {
+    if (results.length === 0) return [];
     const total = results.length;
     return [
       {
@@ -519,69 +544,89 @@ export default function SignalsPage() {
           <TabsContent value="analysis">
             {topPicks.length > 0 && (
               <div className="grid md:grid-cols-2 gap-6">
-                {/* Price Chart */}
+                {/* Price Chart — Real historical data from Kite */}
                 <Card className="bg-card/50 backdrop-blur border-border">
                   <CardHeader>
                     <CardTitle className="text-lg">
                       {topPicks[0].stock.symbol} - 90 Day Price
                     </CardTitle>
+                    {priceMode === "live" && priceData.length > 0 && (
+                      <CardDescription>Historical daily closing prices from Kite Connect</CardDescription>
+                    )}
                   </CardHeader>
                   <CardContent>
-                    <div className="h-72">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={priceData}>
-                          <defs>
-                            <linearGradient
-                              id="colorPrice"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop
-                                offset="5%"
-                                stopColor={chartColors.primary}
-                                stopOpacity={0.3}
-                              />
-                              <stop
-                                offset="95%"
-                                stopColor={chartColors.primary}
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke={chartColors.gridStroke}
-                          />
-                          <XAxis
-                            dataKey="date"
-                            stroke={chartColors.axisStroke}
-                            fontSize={10}
-                            tickFormatter={(v) =>
-                              new Date(v).toLocaleDateString("en-IN", {
-                                month: "short",
-                                day: "numeric",
-                              })
-                            }
-                          />
-                          <YAxis stroke={chartColors.axisStroke} fontSize={12} />
-                          <Tooltip
-                            {...CHART_TOOLTIP_STYLE}
-                            labelFormatter={(v) =>
-                              new Date(v).toLocaleDateString("en-IN")
-                            }
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="close"
-                            stroke={chartColors.primary}
-                            fill="url(#colorPrice)"
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {priceLoading ? (
+                      <div className="h-72 flex items-center justify-center">
+                        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Loading price history...</span>
+                      </div>
+                    ) : priceData.length > 0 ? (
+                      <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={priceData}>
+                            <defs>
+                              <linearGradient
+                                id="colorPrice"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="5%"
+                                  stopColor={chartColors.primary}
+                                  stopOpacity={0.3}
+                                />
+                                <stop
+                                  offset="95%"
+                                  stopColor={chartColors.primary}
+                                  stopOpacity={0}
+                                />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke={chartColors.gridStroke}
+                            />
+                            <XAxis
+                              dataKey="date"
+                              stroke={chartColors.axisStroke}
+                              fontSize={10}
+                              tickFormatter={(v) =>
+                                new Date(v).toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                })
+                              }
+                            />
+                            <YAxis stroke={chartColors.axisStroke} fontSize={12} />
+                            <Tooltip
+                              {...CHART_TOOLTIP_STYLE}
+                              labelFormatter={(v) =>
+                                new Date(v).toLocaleDateString("en-IN")
+                              }
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="close"
+                              stroke={chartColors.primary}
+                              fill="url(#colorPrice)"
+                              strokeWidth={2}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="h-72 flex flex-col items-center justify-center text-center">
+                        <WifiOff className="w-8 h-8 mb-3 text-muted-foreground" />
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Connect to Kite to view historical prices
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Real price data requires an active Kite Connect session
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -759,74 +804,72 @@ export default function SignalsPage() {
                 </CardContent>
               </Card>
 
-              {/* Workflow Timeline */}
+              {/* Recent Screener Runs — real data from screener_snapshots */}
               <Card className="bg-card/50 backdrop-blur border-border">
                 <CardHeader>
-                  <CardTitle className="text-lg">Daily Workflow</CardTitle>
+                  <CardTitle className="text-lg">Recent Screener Runs</CardTitle>
                   <CardDescription>
-                    Automated execution timeline
+                    Last {Math.min(perfSnapshots.length, 5)} screener execution{perfSnapshots.length !== 1 ? "s" : ""}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {[
-                      {
-                        time: "15:15",
-                        label: "Data Collection",
-                        agent: "DataAgent",
-                        icon: Activity,
-                      },
-                      {
-                        time: "15:20",
-                        label: "Indicator Calculation",
-                        agent: "IndicatorAgent",
-                        icon: BarChart3,
-                      },
-                      {
-                        time: "15:27",
-                        label: "Screening",
-                        agent: "ScreenerAgent",
-                        icon: Target,
-                      },
-                      {
-                        time: "15:29",
-                        label: "LLM Analysis",
-                        agent: "AnalystAgent",
-                        icon: Zap,
-                      },
-                      {
-                        time: "09:15",
-                        label: "Order Execution",
-                        agent: "ExecutionAgent",
-                        icon: TrendingUp,
-                      },
-                    ].map((step, i) => {
-                      const Icon = step.icon;
-                      return (
-                        <div
-                          key={i}
-                          className="flex items-center gap-4 p-3 rounded-lg bg-background/50 border border-border"
-                        >
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-xs"
+                  {perfSnapshots.length > 0 ? (
+                    <div className="space-y-3">
+                      {perfSnapshots.slice(0, 5).map((snap) => {
+                        const totalSignals = snap.resultsSummary?.signalCounts
+                          ? Object.values(snap.resultsSummary.signalCounts).reduce((s, v) => s + v, 0)
+                          : 0;
+                        const runDate = new Date(snap.runDate);
+                        return (
+                          <div
+                            key={snap.id}
+                            className="flex items-center gap-4 p-3 rounded-lg bg-background/50 border border-border"
                           >
-                            {step.time}
-                          </Badge>
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Icon className="w-4 h-4 text-primary" />
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-xs"
+                            >
+                              {runDate.toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </Badge>
+                            <div className="p-2 rounded-lg bg-primary/10">
+                              <Activity className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">
+                                {runDate.toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {snap.totalScanned} stocks scanned · {totalSignals} signals
+                              </p>
+                            </div>
+                            <Badge
+                              variant={snap.mode === "live" ? "success" : "outline"}
+                              className="text-[10px]"
+                            >
+                              {snap.mode === "live" ? "LIVE" : "DEMO"}
+                            </Badge>
                           </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">{step.label}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {step.agent}
-                            </p>
-                          </div>
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        No screener runs yet
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Run the screener to see execution history here
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -922,16 +965,20 @@ export default function SignalsPage() {
                   <Card className="bg-card/50 backdrop-blur border-border">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-muted-foreground mb-1">Target Hit Rate</p>
-                      <p className="text-2xl font-bold font-mono text-green-500">
-                        {perfAnalytics.hitRate.targetHitPct.toFixed(1)}%
+                      <p className={`text-2xl font-bold font-mono ${perfAnalytics.hitRate.targetHitPct !== null ? "text-green-500" : "text-muted-foreground"}`}>
+                        {perfAnalytics.hitRate.targetHitPct !== null
+                          ? `${perfAnalytics.hitRate.targetHitPct.toFixed(1)}%`
+                          : "—"}
                       </p>
                     </CardContent>
                   </Card>
                   <Card className="bg-card/50 backdrop-blur border-border">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-muted-foreground mb-1">Stopped Out Rate</p>
-                      <p className="text-2xl font-bold font-mono text-red-500">
-                        {perfAnalytics.hitRate.stoppedOutPct.toFixed(1)}%
+                      <p className={`text-2xl font-bold font-mono ${perfAnalytics.hitRate.stoppedOutPct !== null ? "text-red-500" : "text-muted-foreground"}`}>
+                        {perfAnalytics.hitRate.stoppedOutPct !== null
+                          ? `${perfAnalytics.hitRate.stoppedOutPct.toFixed(1)}%`
+                          : "—"}
                       </p>
                     </CardContent>
                   </Card>
@@ -1341,35 +1388,31 @@ export default function SignalsPage() {
                                 <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Stock</th>
                                 <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Signal</th>
                                 <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Score</th>
-                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Entry</th>
                                 <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Return</th>
+                                <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Period</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {perfAnalytics.bestSignals.map((s) => {
-                                const bestPrice = s.priceAfter10d ?? s.priceAfter5d ?? s.priceAfter3d ?? s.priceAfter1d;
-                                const ret = bestPrice && s.entryPrice > 0
-                                  ? ((bestPrice - s.entryPrice) / s.entryPrice) * 100
-                                  : null;
-                                return (
-                                  <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30">
-                                    <td className="py-2 px-2">
-                                      <div className="font-semibold text-sm">{s.symbol}</div>
-                                      <div className="text-[10px] text-muted-foreground">{s.sector}</div>
-                                    </td>
-                                    <td className="text-center py-2 px-2">
-                                      <Badge variant={s.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
-                                        {s.signal.replace("_", " ")}
-                                      </Badge>
-                                    </td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm">{s.score}</td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm">{formatCurrency(s.entryPrice)}</td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm text-green-500">
-                                      {ret !== null ? `+${ret.toFixed(1)}%` : "—"}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {perfAnalytics.bestSignals.map((ranked) => (
+                                <tr key={ranked.signal.id} className="border-b border-border/50 hover:bg-secondary/30">
+                                  <td className="py-2 px-2">
+                                    <div className="font-semibold text-sm">{ranked.signal.symbol}</div>
+                                    <div className="text-[10px] text-muted-foreground">{ranked.signal.sector}</div>
+                                  </td>
+                                  <td className="text-center py-2 px-2">
+                                    <Badge variant={ranked.signal.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
+                                      {ranked.signal.signal.replace("_", " ")}
+                                    </Badge>
+                                  </td>
+                                  <td className="text-right py-2 px-2 font-mono text-sm">{ranked.signal.score}</td>
+                                  <td className="text-right py-2 px-2 font-mono text-sm text-green-500">
+                                    +{ranked.returnPct.toFixed(1)}%
+                                  </td>
+                                  <td className="text-center py-2 px-2">
+                                    <Badge variant="outline" className="text-[10px] font-mono">{ranked.period}</Badge>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
@@ -1396,35 +1439,31 @@ export default function SignalsPage() {
                                 <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Stock</th>
                                 <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Signal</th>
                                 <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Score</th>
-                                <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Entry</th>
                                 <th className="text-right py-2 px-2 text-xs font-medium text-muted-foreground">Return</th>
+                                <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Period</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {perfAnalytics.worstSignals.map((s) => {
-                                const bestPrice = s.priceAfter10d ?? s.priceAfter5d ?? s.priceAfter3d ?? s.priceAfter1d;
-                                const ret = bestPrice && s.entryPrice > 0
-                                  ? ((bestPrice - s.entryPrice) / s.entryPrice) * 100
-                                  : null;
-                                return (
-                                  <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30">
-                                    <td className="py-2 px-2">
-                                      <div className="font-semibold text-sm">{s.symbol}</div>
-                                      <div className="text-[10px] text-muted-foreground">{s.sector}</div>
-                                    </td>
-                                    <td className="text-center py-2 px-2">
-                                      <Badge variant={s.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
-                                        {s.signal.replace("_", " ")}
-                                      </Badge>
-                                    </td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm">{s.score}</td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm">{formatCurrency(s.entryPrice)}</td>
-                                    <td className="text-right py-2 px-2 font-mono text-sm text-red-500">
-                                      {ret !== null ? `${ret.toFixed(1)}%` : "—"}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {perfAnalytics.worstSignals.map((ranked) => (
+                                <tr key={ranked.signal.id} className="border-b border-border/50 hover:bg-secondary/30">
+                                  <td className="py-2 px-2">
+                                    <div className="font-semibold text-sm">{ranked.signal.symbol}</div>
+                                    <div className="text-[10px] text-muted-foreground">{ranked.signal.sector}</div>
+                                  </td>
+                                  <td className="text-center py-2 px-2">
+                                    <Badge variant={ranked.signal.signal === "STRONG_BUY" ? "success" : "default"} className="text-[10px]">
+                                      {ranked.signal.signal.replace("_", " ")}
+                                    </Badge>
+                                  </td>
+                                  <td className="text-right py-2 px-2 font-mono text-sm">{ranked.signal.score}</td>
+                                  <td className="text-right py-2 px-2 font-mono text-sm text-red-500">
+                                    {ranked.returnPct.toFixed(1)}%
+                                  </td>
+                                  <td className="text-center py-2 px-2">
+                                    <Badge variant="outline" className="text-[10px] font-mono">{ranked.period}</Badge>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
